@@ -1,26 +1,242 @@
 @import "tailwindcss";
 
+/*
+  Footgrit Finance — black & white, flat, square.
+
+  Design rules (enforced below, so a component cannot break them by accident):
+    - pure monochrome: black, white and greys. Meaning comes from weight, fill (solid vs outline),
+      icons and words — never from hue.
+    - no rounded corners anywhere (`border-radius: 0 !important`).
+    - no shadows; depth comes from 1px borders and solid black bars.
+  Type: Inter for everything, tabular figures for money.
+*/
+
+@theme {
+  --color-base: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-2: #f5f5f5;
+  --color-elevated: #ebebeb;
+  --color-line: #d4d4d4;
+  --color-line-soft: #e8e8e8;
+
+  --color-ink: #0a0a0a;
+  --color-ink-secondary: #3f3f3f;
+  --color-ink-muted: #666666;
+
+  /* "brand" is simply black */
+  --color-brand: #000000;
+  --color-brand-dark: #262626;
+  --color-brand-soft: #f0f0f0;
+
+  /* Black panels — sidebar, header strips */
+  --color-night: #000000;
+  --color-night-2: #1a1a1a;
+  --color-night-line: #2e2e2e;
+  --color-night-muted: #a6a6a6;
+
+  /* Legacy fills used by older components, all folded into greys (blue = black so white text stays legible) */
+  --color-block-blue: #000000;
+  --color-block-yellow: #e5e5e5;
+  --color-block-pink: #f0f0f0;
+  --color-block-mint: #f0f0f0;
+  --color-block-lavender: #f0f0f0;
+  --color-block-lime: #f0f0f0;
+  --color-block-orange: #d4d4d4;
+
+  /* Status tones collapse to ink shades */
+  --color-pitch: #000000;
+  --color-info: #262626;
+  --color-warn: #4d4d4d;
+  --color-danger: #000000;
+  --color-success: #000000;
+  --color-violet: #262626;
+  --color-magenta: #262626;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-headline: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-app), ui-monospace, "SF Mono", monospace;
+
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+
+  /* ── Data-viz: a five-step grey ramp, always paired with labels ── */
+  --color-chart-1: #000000;
+  --color-chart-2: #4d4d4d;
+  --color-chart-3: #808080;
+  --color-chart-4: #b3b3b3;
+  --color-chart-5: #d9d9d9;
+  --color-chart-6: #262626;
+  --color-chart-7: #666666;
+  --color-chart-8: #999999;
+
+  --color-seq-100: #e6e6e6;
+  --color-seq-300: #b3b3b3;
+  --color-seq-500: #666666;
+  --color-seq-700: #000000;
+
+  --color-grid: #e8e8e8;
+  --color-axis: #b3b3b3;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  border-color: var(--color-line);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  background: var(--color-base);
+  color: var(--color-ink);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Square and flat, everywhere. */
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* The focus ring is an outline (box-shadow is switched off above). */
+:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}
+.bg-night :focus-visible,
+.bg-brand:focus-visible,
+.bg-black:focus-visible {
+  outline-color: #fff;
+}
+
+/* Mobile safety net: a grid without an explicit grid-cols-* gets one column that may shrink. */
+@layer base {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+::selection {
+  background: #000;
+  color: #fff;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #b3b3b3 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #b3b3b3;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #808080;
+  background-clip: content-box;
+}
+
+input[type="number"]::-webkit-inner-spin-button {
+  opacity: 0.4;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  /* Diagonal hatching: tells two greys apart without colour (second series in a chart, "not yet" cells). */
+  .hatch {
+    background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(0, 0, 0, 0.18) 4px 5px);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-pop-in {
+  animation: pop-in 0.16s ease-out;
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.animate-sheet-up {
+  animation: sheet-up 0.22s ease-out;
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-slide-down {
+  animation: slide-down 0.15s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pop-in,
+  .animate-fade-in,
+  .animate-sheet-up,
+  .animate-slide-down {
+    animation: none;
+  }
 }

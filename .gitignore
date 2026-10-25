@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# keep the template, ignore real env files
+!.env.example
+
+# one-off local DB bootstrap (contains a password)
+local-db-setup.sql
+
+# local database dumps
+.local-backups/
