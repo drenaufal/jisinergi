@@ -6,6 +6,7 @@ import { auditText, recordAudit } from "@/lib/audit";
 import { formError, type FormState } from "@/lib/form";
 import { getT } from "@/lib/i18n/server";
 import { UserEmailExists } from "@/lib/finance/units";
+import { bpToField, readOwnerRows } from "@/lib/finance/ownership";
 import {
   UnitRuleError,
   createUnit,
@@ -55,7 +56,7 @@ export async function createUnitAction(_prev: FormState, formData: FormData): Pr
   const actor = await actionUser("units:manage");
   const raw = Object.fromEntries(formData);
 
-  const unit = makeNewUnitSchema(t).safeParse(raw);
+  const unit = makeNewUnitSchema(t).safeParse({ ...raw, owners: readOwnerRows(formData) });
   const wantsLogin = typeof raw.loginEmail === "string" && raw.loginEmail.trim() !== "";
   const login = wantsLogin
     ? makeNewLoginSchema(t).safeParse({ name: raw.loginName, email: raw.loginEmail, password: raw.loginPassword })
@@ -70,7 +71,7 @@ export async function createUnitAction(_prev: FormState, formData: FormData): Pr
   if (Object.keys(errors).length || !unit.success) return formError(t, errors, publicFields(formData));
 
   try {
-    const created = await createUnit(t, unit.data);
+    const created = await createUnit(t, unit.data, actor.id);
     await recordAudit({
       actorId: actor.id,
       actorName: actor.name,
@@ -79,6 +80,18 @@ export async function createUnitAction(_prev: FormState, formData: FormData): Pr
       entityType: "business_unit",
       entityId: created.id,
       summary: auditText("Unit bisnis dibuat: {name} ({code})", { name: created.name, code: created.code }),
+    });
+    await recordAudit({
+      actorId: actor.id,
+      actorName: actor.name,
+      actorRole: actor.role,
+      action: "finance.unit.owners",
+      entityType: "business_unit",
+      entityId: created.id,
+      summary: auditText("Kepemilikan {unit} diatur: {shares}", {
+        unit: created.name,
+        shares: created.owners.map((o) => `${o.name} ${bpToField(o.shareBp)}%`).join(" · "),
+      }),
     });
     if (login?.success) {
       const account = await createUnitLogin(t, created.id, login.data);

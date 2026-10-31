@@ -22,7 +22,7 @@ export async function LigaSummary({ unit }: { unit: UnitInfo }) {
   const link = (slug: string) => menuHref(unit.code, slug);
   const pct = (fraction: number) => `${Math.round(fraction * 100)}%`;
   const pct1 = (fraction: number) => `${(fraction * 100).toLocaleString(fmt.tag, { maximumFractionDigits: 1 })}%`;
-  const empty = f.capital.count + f.assets.count + f.registration.clubs + f.matchFee.matches + f.budget.lines + f.dividends.count === 0;
+  const empty = f.capital.count + f.assets.count + f.registration.clubs + f.matchFee.matches + f.budget.lines === 0;
 
   const weeks = matchFeeByWeek(dataset.matchFees, unit.programWeeks);
   const topCategories = budgetByCategory(dataset.budget, unit.programWeeks).slice(0, 6);
@@ -30,7 +30,7 @@ export async function LigaSummary({ unit }: { unit: UnitInfo }) {
   const tiles = [
     { slug: "modal", label: "Modal masuk", value: f.capital.total, icon: <Landmark className="size-4" />, block: "red" as const, hint: `${pct(f.capital.returnedShare)} sudah kembali · ${fmt.rupiahCompact(f.capital.outstanding)} belum` },
     { slug: "aset", label: "Aset dibeli", value: f.assets.total, icon: <Package className="size-4" />, block: "blue" as const, hint: `${fmt.number(f.assets.count)} pembelian` },
-    { slug: "registrasi", label: "Uang masuk", value: f.income, icon: <Wallet className="size-4" />, block: "yellow" as const, hint: `Registrasi ${fmt.rupiahCompact(f.registration.received)} · match fee ${fmt.rupiahCompact(f.matchFee.amount)}` },
+    { slug: "registrasi", label: "Uang masuk", value: f.income, icon: <Wallet className="size-4" />, block: "yellow" as const, hint: `Registrasi ${fmt.rupiahCompact(f.registration.received)} · match fee ${fmt.rupiahCompact(f.matchFee.amount)}${f.otherIncome.total > 0 ? ` · lain ${fmt.rupiahCompact(f.otherIncome.total)}` : ""}` },
     {
       slug: "registrasi",
       label: "Sisa tagihan registrasi",
@@ -55,9 +55,9 @@ export async function LigaSummary({ unit }: { unit: UnitInfo }) {
         terms={[
           { term: "Modal masuk", text: "Uang yang disetor pemodal dan berapa persen yang sudah dikembalikan." },
           { term: "Aset dibeli", text: "Peralatan dan sarana pertandingan yang sudah dibeli." },
-          { term: "Uang masuk", text: "Uang dari klub: registrasi (DP + pelunasan) ditambah match fee." },
+          { term: "Uang masuk", text: "Uang dari klub: registrasi (DP + pelunasan) ditambah match fee. Pemasukan lain (sewa stand, parkir) disebut terpisah dan tidak ikut rumus dividen." },
           { term: "Anggaran (RAB)", text: "Perkiraan seluruh pengeluaran: biaya mingguan seluruh program ditambah biaya bulanan." },
-          { term: "Dividen (rumus)", text: "RAB dikurangi (uang modal + registrasi + match fee). Dihitung otomatis." },
+          { term: "Dividen (rumus)", text: "RAB dikurangi (uang modal + registrasi + match fee). Dihitung otomatis, lalu dibagi ke para pemilik di menu Dividen." },
         ]}
       />
 

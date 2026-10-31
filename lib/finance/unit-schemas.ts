@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { TFunction } from "@/lib/i18n/translate";
+import { ownersSchema } from "./ownership";
+import { isIsoDate } from "./period";
 import { UNIT_TYPES } from "./unit-types";
 
 /* Validation for business units and their logins. Kept free of database imports so scripts/test-finance.ts can run it. */
@@ -20,6 +22,10 @@ const weeks = (t: TFunction) =>
     z.number(t("Jumlah minggu harus antara 1 dan 52")).int(t("Jumlah minggu harus antara 1 dan 52")).min(1, t("Jumlah minggu harus antara 1 dan 52")).max(52, t("Jumlah minggu harus antara 1 dan 52")),
   );
 
+/** Liga only: the day week 1 of the program starts. Blank = it starts in the week of the first real cost. */
+const startsOn = (t: TFunction) =>
+  z.preprocess((v) => (v === "" || v == null ? null : v), z.string().trim().refine(isIsoDate, t("Tanggal tidak valid")).nullable());
+
 const description = (t: TFunction) =>
   z.preprocess(
     (v) => (typeof v === "string" && v.trim() ? v.trim() : null),
@@ -37,10 +43,13 @@ export const makeNewUnitSchema = (t: TFunction) =>
     type: z.enum(UNIT_TYPES, t("Pilih jenis unit bisnis")),
     description: description(t),
     programWeeks: weeks(t),
+    programStartsOn: startsOn(t),
+    /** Who owns the unit and each owner's share of its dividend (and, for a Sekolah Bola, the modal they put in). */
+    owners: ownersSchema(t),
   });
 
 export const makeEditUnitSchema = (t: TFunction) =>
-  makeNewUnitSchema(t).omit({ code: true, type: true }).extend({ active: z.boolean() });
+  makeNewUnitSchema(t).omit({ code: true, type: true, owners: true }).extend({ active: z.boolean() });
 
 export const makeNewLoginSchema = (t: TFunction) =>
   z.object({

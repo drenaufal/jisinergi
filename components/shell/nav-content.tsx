@@ -18,6 +18,7 @@ import {
   ScrollText,
   Target,
   Ticket,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { logoutAction } from "@/app/(app)/actions";
@@ -36,6 +37,7 @@ const ICONS: Record<string, LucideIcon> = {
   "match-fee": Ticket,
   registrasi: ClipboardList,
   rab: Calculator,
+  "rab-actual": Wallet,
   pemasukan: ArrowDownToLine,
   pengeluaran: ArrowUpFromLine,
 };

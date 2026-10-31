@@ -4,6 +4,7 @@ import { loadUnitPage } from "@/lib/finance/access";
 import { expenseCategories, listExpenses } from "@/lib/finance/queries";
 import { expenseByCategory, monthOf, sum } from "@/lib/finance/calc";
 import { PageHeader } from "@/components/app/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/misc";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -43,6 +44,7 @@ export default async function ExpensesPage({ params }: { params: Promise<{ code:
     category: r.category,
     name: r.name,
     amount: r.amount,
+    assetType: r.isAsset ? "asset" : "non_asset",
     proofUrl: r.proofUrl,
     note: r.note,
   });
@@ -64,6 +66,7 @@ export default async function ExpensesPage({ params }: { params: Promise<{ code:
           { term: "Tanggal", text: "Hari uang dikeluarkan. Menentukan bulan tempat pengeluaran dihitung." },
           { term: "Kategori", text: "Kelompok biaya, mis. Sewa lapangan atau Perlengkapan. Dipakai untuk grafik." },
           { term: "Keterangan", text: "Untuk apa uang itu dikeluarkan." },
+          { term: "Aset / Non aset", text: "Pengeluaran yang ditandai Aset otomatis tercatat juga di menu Aset. Non aset hanya tercatat sebagai pengeluaran." },
           { term: "Bukti", text: "Foto atau scan struk. “Belum ada bukti” berarti struknya belum diunggah." },
         ]}
         tip={canInput ? "Ketik kategori baru atau pilih yang sudah ada saat menambah pengeluaran." : undefined}
@@ -149,6 +152,7 @@ export default async function ExpensesPage({ params }: { params: Promise<{ code:
                     <TD>{r.category}</TD>
                     <TD>
                       <span className="font-medium text-ink">{r.name}</span>
+                      {r.isAsset && <Badge className="ml-2 align-middle" tone="info">Aset</Badge>}
                       {r.note && <span className="block text-[11px] text-ink-muted">{r.note}</span>}
                     </TD>
                     <TD className="text-right font-medium tabular-nums text-ink">{fmt.rupiah(r.amount)}</TD>

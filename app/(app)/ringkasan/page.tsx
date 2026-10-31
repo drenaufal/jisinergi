@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowUpRight, Building2, Target } from "lucide-react";
+import { ArrowUpRight, Building2, Package, Target } from "lucide-react";
 import { requireCapability } from "@/lib/auth/session";
 import { listVisibleUnits } from "@/lib/finance/access";
 import { getAllUnitFigures } from "@/lib/finance/queries";
@@ -55,6 +55,13 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
     registration: sum(shownLiga, (x) => x.f.dividend.registration),
     matchFee: sum(shownLiga, (x) => x.f.dividend.matchFee),
   });
+  // Assets of every unit (both types) add up for the owner; the filter narrows the per-unit table, not the grand total.
+  const assetOf = (id: string) => figures.get(id)?.figures.assets ?? { total: 0, count: 0 };
+  const assetsLigaAll = sum(ligaUnits, (u) => assetOf(u.id).total);
+  const assetsSchoolAll = sum(schoolUnits, (u) => assetOf(u.id).total);
+  const assetsAll = assetsLigaAll + assetsSchoolAll;
+  const assetCountAll = sum(units, (u) => assetOf(u.id).count);
+  const shownAssetUnits = pool.filter((u) => assetOf(u.id).count > 0 || selected);
   const schoolIncome = sum(shownSchool, (x) => x.f.income.total);
   const schoolExpense = sum(shownSchool, (x) => x.f.expense);
 
@@ -135,9 +142,10 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
             </div>
           </section>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
             <Kpi label="Dividen Liga" value={fmt.rupiahCompact(owner.liga)} full={fmt.rupiah(owner.liga)} block="red" hint={`${fmt.number(ligaUnits.length)} unit Liga`} />
             <Kpi label="Dividen Sekolah Bola" value={fmt.rupiahCompact(owner.sekolahBola)} full={fmt.rupiah(owner.sekolahBola)} block="blue" hint={`${fmt.number(schoolUnits.length)} unit Sekolah Bola`} />
+            <Kpi label="Total aset" value={fmt.rupiahCompact(assetsAll)} full={fmt.rupiah(assetsAll)} icon={<Package className="size-4" />} block="yellow" hint={`Liga ${fmt.rupiahCompact(assetsLigaAll)} · Sekolah Bola ${fmt.rupiahCompact(assetsSchoolAll)}`} />
             <Kpi label="Total unit" value={fmt.number(units.length)} block="white" hint={`${fmt.number(ligaUnits.length)} Liga · ${fmt.number(schoolUnits.length)} Sekolah Bola`} />
             <Kpi label="Target" value="Rp 3 M" full={fmt.rupiah(owner.target)} block="white" hint="Dividen Liga + Sekolah Bola" />
           </div>
@@ -151,6 +159,7 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                 { term: "Dividen Liga", text: "RAB − (uang modal + uang masuk registrasi + uang masuk match fee), dihitung per unit Liga." },
                 { term: "Dividen Sekolah Bola", text: "Pemasukan − pengeluaran, dihitung per bulan lalu dijumlahkan, per unit Sekolah Bola." },
                 { term: "Akumulasi", text: "Dividen Liga ditambah dividen Sekolah Bola dari semua unit." },
+                { term: "Total aset", text: "Nilai seluruh aset dari semua unit, Liga dan Sekolah Bola. Aset berasal dari menu Aset, baris RAB bertanda Aset, dan pengeluaran Sekolah Bola bertanda Aset." },
               ]}
             />
 
@@ -231,7 +240,7 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                         title={selected ? `Perhitungan — ${selected.name}` : "Perhitungan — semua unit Sekolah Bola"}
                         formula="Dividen per bulan = Pemasukan − Pengeluaran"
                         lines={[
-                          { label: "Total pemasukan", value: fmt.rupiah(schoolIncome), hint: "Registrasi + jersey + iuran bulanan" },
+                          { label: "Total pemasukan", value: fmt.rupiah(schoolIncome), hint: "Registrasi + iuran bulanan" },
                           { op: "−", label: "Total pengeluaran", value: fmt.rupiah(schoolExpense) },
                         ]}
                         resultLabel="Dividen Sekolah Bola"
@@ -304,6 +313,61 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                 )}
               </section>
             )}
+
+            {/* ── Aset ─────────────────────────────────────────────── */}
+            <section className="mt-10">
+              <h2 className="mb-3 border-b-2 border-black pb-2 text-lg font-semibold tracking-tight">Aset</h2>
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+                <section className="border border-ink bg-white">
+                  <header className="border-b border-ink px-5 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Akumulasi aset — semua unit</p>
+                  </header>
+                  <div className="space-y-3 p-5">
+                    <p className="text-3xl font-semibold tabular-nums text-ink" title={fmt.rupiah(assetsAll)}>{fmt.rupiah(assetsAll)}</p>
+                    <p className="text-xs text-ink-muted">{fmt.number(assetCountAll)} aset tercatat</p>
+                    <dl className="divide-y divide-line border border-line text-sm">
+                      <div className="flex items-center justify-between px-3 py-2"><dt className="text-ink-secondary">Aset Liga</dt><dd className="font-semibold tabular-nums text-ink">{fmt.rupiah(assetsLigaAll)}</dd></div>
+                      <div className="flex items-center justify-between px-3 py-2"><dt className="text-ink-secondary">Aset Sekolah Bola</dt><dd className="font-semibold tabular-nums text-ink">{fmt.rupiah(assetsSchoolAll)}</dd></div>
+                    </dl>
+                  </div>
+                </section>
+                <Card>
+                  <CardContent className="space-y-3">
+                    <BlockTitle title="Aset per unit" hint={selected ? `Unit yang dipilih: ${selected.name}` : "Semua unit, dari yang bernilai terbesar."} />
+                    {shownAssetUnits.length === 0 ? (
+                      <p className="py-4 text-center text-xs text-ink-muted">Belum ada aset tercatat.</p>
+                    ) : (
+                      <Table>
+                        <THead>
+                          <TR className="hover:bg-transparent">
+                            <TH>Unit</TH>
+                            <TH>Jenis</TH>
+                            <TH className="text-right">Jumlah</TH>
+                            <TH className="text-right">Nilai aset</TH>
+                          </TR>
+                        </THead>
+                        <TBody>
+                          {[...shownAssetUnits]
+                            .sort((a, b) => assetOf(b.id).total - assetOf(a.id).total)
+                            .map((u) => (
+                              <TR key={u.id}>
+                                <TD>
+                                  <Link href={menuHref(u.code, "aset")} className="inline-flex items-center gap-1 font-semibold text-ink underline decoration-ink/30 underline-offset-2 hover:decoration-ink">
+                                    {u.name} <ArrowUpRight className="size-3" />
+                                  </Link>
+                                </TD>
+                                <TD>{UNIT_TYPE_LABEL[u.type]}</TD>
+                                <TD className="text-right tabular-nums">{fmt.number(assetOf(u.id).count)}</TD>
+                                <TD className="text-right font-semibold tabular-nums text-ink">{fmt.rupiah(assetOf(u.id).total)}</TD>
+                              </TR>
+                            ))}
+                        </TBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </section>
           </div>
 
           <p className="mt-6 text-[11px] text-ink-muted">

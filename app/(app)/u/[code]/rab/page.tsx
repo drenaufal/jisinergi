@@ -13,7 +13,7 @@ import { RankBars, ShareDonut } from "@/components/finance/charts";
 import { GuideCard } from "@/components/finance/guide-card";
 import { Kpi } from "@/components/finance/kpi";
 import { getI18n } from "@/lib/i18n/server";
-import { AddRecordButton, DeleteRecordButton, EditRecordButton, type FinanceRecord } from "../forms";
+import { AddRecordButton, DeleteRecordButton } from "../forms";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getI18n()).t("RAB") };
@@ -30,7 +30,8 @@ export default async function BudgetPage({ params }: { params: Promise<{ code: s
     .sort((a, b) => a.order - b.order)
     .map(({ category, period }) => ({ category, period }));
   const formCtx = { ...form, categories };
-  const actions = canInput || canDelete;
+  // a saved RAB line is final: there is no edit button, only the owner may still delete one
+  const actions = canDelete;
 
   const blocks = [unit].map((unit) => {
       const mine = rows.filter((r) => r.businessUnitId === unit.id);
@@ -51,17 +52,6 @@ export default async function BudgetPage({ params }: { params: Promise<{ code: s
   const ranked = [...byCategory.entries()].sort((a, b) => b[1] - a[1]);
   const top = ranked.slice(0, 8);
   const rest = sum(ranked.slice(8), ([, v]) => v);
-
-  const record = (r: (typeof rows)[number]): FinanceRecord => ({
-    id: r.id,
-    businessUnitId: r.businessUnitId,
-    period: r.period,
-    category: r.category,
-    name: r.name,
-    quantity: r.quantity,
-    unitPrice: r.unitPrice,
-    note: r.note,
-  });
 
   const budgetTable = ({ groups, title, hint, footer }: {
     groups: BudgetGroup<(typeof rows)[number]>[];
@@ -132,6 +122,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ code: s
               <td className="px-3 py-2 text-xs tabular-nums text-ink-muted">{index}.{ii + 1}</td>
               <td className="px-3 py-2 text-ink-secondary">
                 {item.name}
+                {item.isAsset && <Badge className="ml-2 align-middle" tone="info">{t("Aset")}</Badge>}
                 {lineTotal === 0 && <Badge className="ml-2 align-middle" tone="neutral">{t("Belum dianggarkan")}</Badge>}
                 {item.note && <span className="block text-[11px] text-ink-muted">{item.note}</span>}
               </td>
@@ -141,8 +132,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ code: s
               {actions && (
                 <td className="px-2 py-1">
                   <div className="flex justify-end gap-0.5">
-                    {canInput && <EditRecordButton kind="budget" record={record(item)} ctx={formCtx} />}
-                    {canDelete && <DeleteRecordButton kind="budget" id={item.id} name={item.name} />}
+                    <DeleteRecordButton kind="budget" id={item.id} name={item.name} />
                   </div>
                 </td>
               )}
@@ -171,8 +161,9 @@ export default async function BudgetPage({ params }: { params: Promise<{ code: s
           { term: t("Bulanan"), text: t("Biaya yang dikeluarkan satu kali (peralatan, hadiah, seragam, publikasi). Dihitung sekali dalam total.") },
           { term: t("Jumlah × Harga satuan"), text: t("Setiap baris = berapa banyak × harga per satu. Kolom Total sudah menghitungnya.") },
           { term: t("Estimasi OPEX"), text: t("OPEX = biaya operasional. Estimasi = total mingguan seluruh program ditambah total bulanan.") },
+          { term: t("Aset / Non aset"), text: t("Baris Aset adalah barang yang dimiliki unit; nilainya otomatis tercatat di menu Aset. Non aset hanya menjadi anggaran.") },
         ]}
-        tip={t("Baris bertanda “Belum dianggarkan” ada di daftar tetapi nilainya masih 0.")}
+        tip={t("Baris RAB yang sudah disimpan tidak dapat diubah lagi, jadi periksa dulu sebelum menyimpan. Baris bertanda “Aset” otomatis masuk ke menu Aset. Biaya yang benar-benar keluar dicatat di menu RAB Actual.")}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

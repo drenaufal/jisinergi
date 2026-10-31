@@ -3,7 +3,8 @@ import Link from "next/link";
 import { ArrowUpRight, Building2, Mail } from "lucide-react";
 import { requireCapability } from "@/lib/auth/session";
 import { listVisibleUnits } from "@/lib/finance/access";
-import { listUnitLogins } from "@/lib/finance/units";
+import { listUnitLogins, listUnitOwners } from "@/lib/finance/units";
+import { bpToField } from "@/lib/finance/ownership";
 import { UNIT_MENUS, UNIT_TYPE_LABEL, menuHref } from "@/lib/finance/unit-types";
 import { PageHeader } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -16,15 +17,15 @@ export const metadata: Metadata = { title: "Kelola Unit Bisnis" };
 export const dynamic = "force-dynamic";
 
 const STEPS = [
-  { n: "1", title: "Buat unit bisnis", text: "Pilih jenis: Liga atau Sekolah Bola. Jenis menentukan menu unit." },
+  { n: "1", title: "Buat unit bisnis", text: "Pilih jenis: Liga atau Sekolah Bola, lalu isi pemilik dan persentase dividennya." },
   { n: "2", title: "Buat akun Admin Unit", text: "Akun ini hanya bisa melihat dan mengisi unitnya sendiri." },
-  { n: "3", title: "Isi data lewat menu unit", text: "Liga: enam menu keuangan. Sekolah Bola: Pemasukan dan Pengeluaran." },
+  { n: "3", title: "Isi data lewat menu unit", text: "Liga: menu keuangan dan RAB Actual. Sekolah Bola: Pemasukan, Pengeluaran, Aset, Modal, Dividen." },
 ];
 
 export default async function BusinessUnitsPage() {
   const { fmt } = await getI18n();
   const user = await requireCapability("units:manage");
-  const [units, logins] = await Promise.all([listVisibleUnits(user), listUnitLogins()]);
+  const [units, logins, owners] = await Promise.all([listVisibleUnits(user), listUnitLogins(), listUnitOwners()]);
 
   return (
     <div>
@@ -56,6 +57,7 @@ export default async function BusinessUnitsPage() {
         <div className="space-y-4">
           {units.map((unit) => {
             const mine = logins.filter((l) => l.unitId === unit.id);
+            const unitOwners = owners.filter((o) => o.unitId === unit.id);
             const menus = UNIT_MENUS[unit.type];
             return (
               <Card key={unit.id}>
@@ -72,6 +74,10 @@ export default async function BusinessUnitsPage() {
                         {unit.type === "liga" ? `${unit.programWeeks} minggu program · ` : ""}
                         Menu: {menus.map((m) => m.label).join(", ")}
                         {unit.description ? ` · ${unit.description}` : ""}
+                      </p>
+                      <p className="mt-1 text-xs text-ink-muted">
+                        <span className="font-semibold text-ink">Kepemilikan:</span>{" "}
+                        {unitOwners.length ? unitOwners.map((o) => `${o.name} ${bpToField(o.shareBp)}%`).join(" · ") : "belum diatur — isi di menu Dividen unit ini"}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
