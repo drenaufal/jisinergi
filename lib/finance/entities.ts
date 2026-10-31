@@ -5,24 +5,26 @@ import { msg } from "@/lib/i18n/translate";
 import {
   budgetPeriod,
   capitalStatus,
+  finActualCosts,
+  finActualItems,
   finAssets,
   finBudgetItems,
   finCapital,
-  finDividends,
   finExpenses,
   finMatchFees,
+  finOtherIncome,
   finRegistrations,
   finStudentPayments,
   finStudents,
-  studentPaymentKind,
 } from "@/lib/db/schema";
 import { documentUrlField } from "@/lib/media";
+import { isIsoDate } from "./period";
 
 /**
  * The kinds of data a unit keeps. Which kinds a unit may hold depends on its type
- * (lib/finance/unit-types.ts): Liga has the first six, Sekolah Bola the last three.
+ * (lib/finance/unit-types.ts): asset and capital belong to both, the rest to one type each.
  */
-export const FINANCE_KINDS = ["asset", "capital", "dividend", "registration", "matchfee", "budget", "student", "payment", "expense"] as const;
+export const FINANCE_KINDS = ["asset", "capital", "registration", "matchfee", "otherincome", "budget", "actualitem", "actualcost", "student", "payment", "expense"] as const;
 export type FinanceKind = (typeof FINANCE_KINDS)[number];
 export const isFinanceKind = (v: unknown): v is FinanceKind =>
   typeof v === "string" && (FINANCE_KINDS as readonly string[]).includes(v);
@@ -54,15 +56,9 @@ export const moneyField = (t: TFunction) =>
 const moneyOrZero = (t: TFunction) =>
   z.preprocess((v) => (v === "" || v == null ? 0 : digits(v)), moneyField(t));
 
-const isDate = (v: string) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const d = new Date(v + "T00:00:00Z");
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
-};
-
-const dateField = (t: TFunction) => z.string().trim().refine(isDate, t("Tanggal tidak valid"));
+const dateField = (t: TFunction) => z.string().trim().refine(isIsoDate, t("Tanggal tidak valid"));
 const optionalDate = (t: TFunction) =>
-  z.preprocess((v) => (v === "" || v == null ? null : v), z.string().trim().refine(isDate, t("Tanggal tidak valid")).nullable());
+  z.preprocess((v) => (v === "" || v == null ? null : v), z.string().trim().refine(isIsoDate, t("Tanggal tidak valid")).nullable());
 
 const text = (t: TFunction, label: MessageId, max: number) =>
   z.string().trim().min(1, t(label)).max(max, t("Maksimal {n} karakter", { n: max }));
@@ -100,18 +96,15 @@ export const capitalSchema = (t: TFunction) =>
     note: note(t),
   });
 
-export const dividendSchema = (t: TFunction) =>
-  z.object({
-    recipientName: text(t, "Nama penerima wajib diisi", 120),
-    amount: moneyField(t),
-    paidOn: optionalDate(t),
-    note: note(t),
-  });
+/** The age group / division a club entered ("U8", "U9"…). Optional: blank = the league has no groups. */
+const ageGroup = (t: TFunction) =>
+  z.preprocess((v) => (typeof v === "string" ? v.trim() : ""), z.string().max(40, t("Maksimal {n} karakter", { n: 40 })));
 
 export const registrationSchema = (t: TFunction) =>
   z
     .object({
       clubName: text(t, "Nama klub wajib diisi", 160),
+      ageGroup: ageGroup(t),
       fee: moneyField(t),
       dpAmount: moneyOrZero(t),
       dpPaidOn: optionalDate(t),
@@ -130,6 +123,7 @@ export const registrationSchema = (t: TFunction) =>
 export const matchFeeSchema = (t: TFunction) =>
   z.object({
     clubName: text(t, "Nama klub wajib diisi", 160),
+    ageGroup: ageGroup(t),
     week: wholeNumber(t, 1, 52, "Minggu harus antara 1 dan 52"),
     matches: wholeNumber(t, 0, 50, "Jumlah laga harus antara 0 dan 50"),
     feePerMatch: moneyField(t),
@@ -137,15 +131,61 @@ export const matchFeeSchema = (t: TFunction) =>
     note: note(t),
   });
 
-export const budgetSchema = (t: TFunction) =>
+/** Money that is neither registration nor match fee (stand rent, parking tickets…), booked in a match week. */
+export const otherIncomeSchema = (t: TFunction) =>
   z.object({
-    period: z.enum(budgetPeriod, t("Pilih jenis biaya")),
-    category: text(t, "Kategori wajib diisi", 160),
-    name: text(t, "Nama biaya wajib diisi", 200),
-    quantity: wholeNumber(t, 0, 1_000_000, "Jumlah harus berupa angka bulat 0 atau lebih"),
-    unitPrice: moneyField(t),
+    name: text(t, "Nama pemasukan wajib diisi", 160),
+    week: wholeNumber(t, 1, 52, "Minggu harus antara 1 dan 52"),
+    amount: moneyField(t),
+    proofUrl: proof(t),
     note: note(t),
   });
+
+/** The Aset / Non aset radio of the RAB and expense forms; kept in the database as a yes/no `isAsset`. */
+export const ASSET_TYPES = ["non_asset", "asset"] as const;
+const assetType = (t: TFunction) => z.enum(ASSET_TYPES, t("Pilih aset atau non aset")).default("non_asset");
+const withIsAsset = <T extends { assetType: (typeof ASSET_TYPES)[number] }>({ assetType, ...rest }: T) => ({
+  ...rest,
+  isAsset: assetType === "asset",
+});
+
+export const budgetSchema = (t: TFunction) =>
+  z
+    .object({
+      period: z.enum(budgetPeriod, t("Pilih jenis biaya")),
+      category: text(t, "Kategori wajib diisi", 160),
+      name: text(t, "Nama biaya wajib diisi", 200),
+      quantity: wholeNumber(t, 0, 1_000_000, "Jumlah harus berupa angka bulat 0 atau lebih"),
+      unitPrice: moneyField(t),
+      assetType: assetType(t),
+      note: note(t),
+    })
+    .transform(withIsAsset);
+
+/** A cost line the RAB does not have (added on the RAB Actual page). */
+export const actualItemSchema = (t: TFunction) =>
+  z.object({
+    period: z.enum(budgetPeriod, t("Pilih jenis biaya")).default("weekly"),
+    category: text(t, "Kategori wajib diisi", 160),
+    name: text(t, "Nama biaya wajib diisi", 200),
+    note: note(t),
+  });
+
+/** What was really spent. `itemRef` is "b:<RAB line id>" or "a:<extra line id>"; records.ts checks it belongs to the unit. */
+export const actualCostSchema = (t: TFunction) =>
+  z
+    .object({
+      itemRef: z.string().trim().regex(/^[ab]:[0-9a-f-]{36}$/, t("Pilih keterangan biaya")),
+      amount: moneyField(t).refine((v) => v > 0, t("Nominal harus lebih dari 0")),
+      spentOn: dateField(t),
+      proofUrl: proof(t),
+      note: note(t),
+    })
+    .transform(({ itemRef, ...rest }) => ({
+      ...rest,
+      budgetItemId: itemRef.startsWith("b:") ? itemRef.slice(2) : null,
+      actualItemId: itemRef.startsWith("a:") ? itemRef.slice(2) : null,
+    }));
 
 /* ── Sekolah Bola ───────────────────────────────────────────────────── */
 
@@ -168,11 +208,14 @@ export const studentSchema = (t: TFunction) =>
     note: note(t),
   });
 
+/** Jersey money is not income, so it cannot be recorded: only these two kinds are accepted. */
+export const PAYMENT_KINDS = ["registration", "monthly"] as const;
+
 export const paymentSchema = (t: TFunction) =>
   z
     .object({
       studentId: z.string().trim().min(1, t("Pilih siswa")),
-      kind: z.enum(studentPaymentKind, t("Pilih jenis pembayaran")),
+      kind: z.enum(PAYMENT_KINDS, t("Pilih jenis pembayaran")),
       paidOn: dateField(t),
       amount: moneyField(t),
       discount: moneyOrZero(t),
@@ -187,26 +230,27 @@ export const paymentSchema = (t: TFunction) =>
         }
       }
     })
-    // only a monthly fee covers a month; jerseys carry no discount
+    // a monthly fee covers the month it names; the registration fee already includes the fee of the month it was paid in
     .transform((v) => ({
       ...v,
-      period: v.kind === "monthly" ? v.period : null,
-      discount: v.kind === "jersey" ? 0 : v.discount,
+      period: v.kind === "monthly" ? v.period : v.paidOn.slice(0, 7),
     }));
 
 export const expenseSchema = (t: TFunction) =>
-  z.object({
-    spentOn: dateField(t),
-    category: text(t, "Kategori wajib diisi", 120),
-    name: text(t, "Keterangan pengeluaran wajib diisi", 200),
-    amount: moneyField(t),
-    proofUrl: proof(t),
-    note: note(t),
-  });
+  z
+    .object({
+      spentOn: dateField(t),
+      category: text(t, "Kategori wajib diisi", 120),
+      name: text(t, "Keterangan pengeluaran wajib diisi", 200),
+      amount: moneyField(t),
+      assetType: assetType(t),
+      proofUrl: proof(t),
+      note: note(t),
+    })
+    .transform(withIsAsset);
 
-export const PAYMENT_KIND_LABEL: Record<(typeof studentPaymentKind)[number], string> = {
+export const PAYMENT_KIND_LABEL: Record<(typeof PAYMENT_KINDS)[number], string> = {
   registration: "Registrasi",
-  jersey: "Jersey",
   monthly: "Bulanan",
 };
 
@@ -240,26 +284,26 @@ export const ENTITIES: Record<FinanceKind, EntityDef> = {
     proofs: [],
     title: (r) => asText(r.ownerName),
   },
-  dividend: {
-    label: msg("Dividen"),
-    table: finDividends,
-    schema: dividendSchema,
-    proofs: [],
-    title: (r) => asText(r.recipientName),
-  },
   registration: {
     label: msg("Uang masuk registrasi"),
     table: finRegistrations,
     schema: registrationSchema,
     proofs: ["dpProofUrl", "finalProofUrl"],
-    title: (r) => asText(r.clubName),
+    title: (r) => `${r.ageGroup ? asText(r.ageGroup) + " " : ""}${asText(r.clubName)}`,
   },
   matchfee: {
     label: msg("Uang masuk match fee"),
     table: finMatchFees,
     schema: matchFeeSchema,
     proofs: ["proofUrl"],
-    title: (r) => `${asText(r.clubName)} · W${asText(r.week)}`,
+    title: (r) => `${r.ageGroup ? asText(r.ageGroup) + " " : ""}${asText(r.clubName)} · W${asText(r.week)}`,
+  },
+  otherincome: {
+    label: msg("Pemasukan lain"),
+    table: finOtherIncome,
+    schema: otherIncomeSchema,
+    proofs: ["proofUrl"],
+    title: (r) => `${asText(r.name)} · W${asText(r.week)}`,
   },
   student: {
     label: msg("Siswa"),
@@ -288,5 +332,19 @@ export const ENTITIES: Record<FinanceKind, EntityDef> = {
     schema: budgetSchema,
     proofs: [],
     title: (r) => asText(r.name),
+  },
+  actualitem: {
+    label: msg("Keterangan biaya"),
+    table: finActualItems,
+    schema: actualItemSchema,
+    proofs: [],
+    title: (r) => asText(r.name),
+  },
+  actualcost: {
+    label: msg("Biaya actual"),
+    table: finActualCosts,
+    schema: actualCostSchema,
+    proofs: ["proofUrl"],
+    title: (r) => `${asText(r.spentOn)} · Rp ${Number(r.amount ?? 0).toLocaleString("id-ID")}`,
   },
 };

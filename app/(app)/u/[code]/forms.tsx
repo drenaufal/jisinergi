@@ -12,9 +12,11 @@ import { toast } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DocumentUpload } from "@/components/app/document-upload";
 import { MoneyInput } from "@/components/finance/money-input";
+import { weekNumber } from "@/lib/finance/calc";
 import { useI18n } from "@/lib/i18n/client";
 import { APP_TIME_ZONE } from "@/lib/i18n/format";
 import { msg } from "@/lib/i18n/translate";
+import { cn } from "@/lib/utils";
 
 /** A row as the pages hand it to the forms: plain strings, numbers and nulls only. */
 export type FinanceRecord = { id: string; businessUnitId: string } & Record<string, string | number | null>;
@@ -37,6 +39,14 @@ export type FormContext = {
   students?: { id: string; name: string; jerseyNumber: number | null }[];
   /** Sekolah Bola: expense categories already in use. */
   expenseCategories?: string[];
+  /** Registration / match fee: age groups already in use ("U8", "U9"…), to suggest while typing. */
+  ageGroups?: string[];
+  /** RAB Actual: every cost line a real cost can be booked on (RAB lines and extra lines), for the picker. */
+  actualLines?: { key: string; label: string; category: string; period: "weekly" | "monthly" }[];
+  /** RAB Actual: categories already used, to suggest while adding an extra cost line. */
+  actualCategories?: string[];
+  /** RAB Actual: the day week 1 starts, so the cost form can say which week a date falls in. Null = not known yet. */
+  programStart?: string | null;
 };
 
 const COPY = {
@@ -50,11 +60,6 @@ const COPY = {
     edit: msg("Ubah modal"),
     hint: msg("Catat uang yang disetor pemodal ke unit bisnis dan apakah sudah dikembalikan."),
   },
-  dividend: {
-    add: msg("Tambah dividen"),
-    edit: msg("Ubah dividen"),
-    hint: msg("Catat bagian keuntungan yang dibagikan kepada seorang pemodal."),
-  },
   registration: {
     add: msg("Tambah registrasi klub"),
     edit: msg("Ubah registrasi klub"),
@@ -65,6 +70,11 @@ const COPY = {
     edit: msg("Ubah match fee"),
     hint: msg("Isi jumlah laga yang dimainkan sebuah klub pada satu minggu. Nominal dihitung otomatis dari tarif per laga."),
   },
+  otherincome: {
+    add: msg("Tambah pemasukan lain"),
+    edit: msg("Ubah pemasukan lain"),
+    hint: msg("Uang masuk di luar registrasi dan match fee, mis. sewa stand atau tiket parkir, dicatat per minggu pertandingan."),
+  },
   student: {
     add: msg("Tambah siswa"),
     edit: msg("Ubah data siswa"),
@@ -73,7 +83,7 @@ const COPY = {
   payment: {
     add: msg("Catat pembayaran"),
     edit: msg("Ubah pembayaran"),
-    hint: msg("Registrasi, pembelian jersey, atau iuran bulanan seorang siswa — lengkap dengan bukti pembayaran dan diskon."),
+    hint: msg("Registrasi atau iuran bulanan seorang siswa — lengkap dengan bukti pembayaran dan diskon. Uang registrasi sudah termasuk iuran bulan saat dibayar."),
   },
   expense: {
     add: msg("Tambah pengeluaran"),
@@ -83,7 +93,17 @@ const COPY = {
   budget: {
     add: msg("Tambah baris RAB"),
     edit: msg("Ubah baris RAB"),
-    hint: msg("Satu baris anggaran: nama biaya, jumlah, dan harga satuan. Totalnya dihitung otomatis."),
+    hint: msg("Satu baris anggaran: nama biaya, jumlah, dan harga satuan. Totalnya dihitung otomatis. Baris yang sudah disimpan tidak dapat diubah lagi."),
+  },
+  actualitem: {
+    add: msg("Tambah keterangan biaya"),
+    edit: msg("Ubah keterangan biaya"),
+    hint: msg("Biaya yang tidak ada di RAB. Keterangan ini tidak punya budget; setelah dibuat, catat biaya actualnya."),
+  },
+  actualcost: {
+    add: msg("Tambah biaya actual"),
+    edit: msg("Ubah biaya actual"),
+    hint: msg("Uang yang benar-benar keluar untuk satu keterangan biaya: berapa, kapan, dan bukti pembayarannya."),
   },
 } as const;
 
@@ -95,6 +115,36 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <legend className="mb-3 border-b border-line pb-1 text-[11px] font-semibold uppercase tracking-wider text-ink">{title}</legend>
       <div className="grid gap-4 sm:grid-cols-2">{children}</div>
     </fieldset>
+  );
+}
+
+/** Aset / Non aset radio shared by the RAB and the expense form. Asset rows are copied into the Aset menu automatically. */
+function AssetRadio({ value, onChange, error, hint }: { value: string; onChange: (v: string) => void; error?: string; hint: string }) {
+  const { t } = useI18n();
+  const options = [
+    { value: "non_asset", label: t("Non aset"), text: t("Biaya habis pakai atau jasa") },
+    { value: "asset", label: t("Aset"), text: t("Barang yang dimiliki unit") },
+  ];
+  return (
+    <Field label={t("Aset atau non aset")} error={error} hint={hint} className="sm:col-span-2">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map((o) => (
+          <label
+            key={o.value}
+            className={cn(
+              "flex cursor-pointer flex-col gap-0.5 border p-3 transition-colors",
+              value === o.value ? "border-2 border-black bg-surface-2" : "border-line hover:border-ink",
+            )}
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <input type="radio" name="assetType" value={o.value} checked={value === o.value} onChange={() => onChange(o.value)} className="accent-black" />
+              {o.label}
+            </span>
+            <span className="pl-6 text-[11px] text-ink-muted">{o.text}</span>
+          </label>
+        ))}
+      </div>
+    </Field>
   );
 }
 
@@ -140,6 +190,9 @@ function RecordForm({
   const [price, setPrice] = useState(Number(val("unitPrice", "0")) || 0);
   const [period, setPeriod] = useState(val("period", "weekly"));
   const [payKind, setPayKind] = useState(val("kind", "monthly"));
+  const [assetKind, setAssetKind] = useState(val("assetType", "non_asset"));
+  const [paidOn, setPaidOn] = useState(val("paidOn", today()));
+  const [spentOn, setSpentOn] = useState(val("spentOn", today()));
 
   return (
     <form action={action} className="space-y-6">
@@ -186,25 +239,14 @@ function RecordForm({
           </Section>
         )}
 
-        {kind === "dividend" && (
-          <Section title={t("Dividen")}>
-            <Field label={t("Nama penerima")} error={fe.recipientName}>
-              <Input name="recipientName" required maxLength={120} defaultValue={val("recipientName")} />
-            </Field>
-            <Field label={t("Nominal dividen")} error={fe.amount}>
-              <MoneyInput name="amount" required defaultValue={val("amount")} invalid={!!fe.amount} />
-            </Field>
-            <Field label={t("Tanggal dibayarkan")} error={fe.paidOn} hint={t("Kosongkan jika belum dibayarkan.")} className="sm:col-span-2">
-              <Input type="date" name="paidOn" defaultValue={val("paidOn")} />
-            </Field>
-          </Section>
-        )}
-
         {kind === "registration" && (
           <>
             <Section title={t("Klub & biaya")}>
               <Field label={t("Nama klub")} error={fe.clubName}>
                 <Input name="clubName" required maxLength={160} list="finance-clubs" defaultValue={val("clubName")} />
+              </Field>
+              <Field label={t("Kelompok umur")} error={fe.ageGroup} hint={t("mis. U8, U9. Kosongkan bila liga tidak punya kelompok.")}>
+                <Input name="ageGroup" maxLength={40} list="finance-age-groups" defaultValue={val("ageGroup")} />
               </Field>
               <Field label={t("Biaya registrasi")} error={fe.fee} hint={t("Total yang harus dibayar klub.")}>
                 <MoneyInput name="fee" required defaultValue={val("fee")} invalid={!!fe.fee} />
@@ -240,6 +282,9 @@ function RecordForm({
             <Field label={t("Nama klub")} error={fe.clubName}>
               <Input name="clubName" required maxLength={160} list="finance-clubs" defaultValue={val("clubName")} />
             </Field>
+            <Field label={t("Kelompok umur")} error={fe.ageGroup} hint={t("mis. U8, U9. Kosongkan bila liga tidak punya kelompok.")}>
+              <Input name="ageGroup" maxLength={40} list="finance-age-groups" defaultValue={val("ageGroup")} />
+            </Field>
             <Field
               label={t("Minggu ke-")}
               error={fe.week}
@@ -267,6 +312,23 @@ function RecordForm({
             </p>
             <div className="sm:col-span-2">
               <DocumentUpload name="proofUrl" label={t("Bukti pembayaran match fee")} defaultValue={val("proofUrl")} error={fe.proofUrl} icon={Receipt} />
+            </div>
+          </Section>
+        )}
+
+        {kind === "otherincome" && (
+          <Section title={t("Pemasukan lain")}>
+            <Field label={t("Keterangan")} error={fe.name} hint={t("mis. Sewa stand es teh, tiket parkir")} className="sm:col-span-2">
+              <Input name="name" required maxLength={160} defaultValue={val("name")} />
+            </Field>
+            <Field label={t("Minggu ke-")} error={fe.week} hint={ctx.programWeeks ? t("Program berjalan {n} minggu.", { n: ctx.programWeeks }) : undefined}>
+              <Input type="number" name="week" required min={1} max={52} step={1} defaultValue={val("week")} />
+            </Field>
+            <Field label={t("Nominal")} error={fe.amount}>
+              <MoneyInput name="amount" required defaultValue={val("amount")} invalid={!!fe.amount} />
+            </Field>
+            <div className="sm:col-span-2">
+              <DocumentUpload name="proofUrl" label={t("Bukti transfer")} defaultValue={val("proofUrl")} error={fe.proofUrl} icon={Receipt} />
             </div>
           </Section>
         )}
@@ -311,7 +373,6 @@ function RecordForm({
               <Field label={t("Jenis pembayaran")} error={fe.kind} className="sm:col-span-2">
                 <Select name="kind" value={payKind} onChange={(e) => setPayKind(e.target.value)} disabled={!!record}>
                   <option value="registration">{t("Registrasi")}</option>
-                  <option value="jersey">{t("Pembelian jersey")}</option>
                   <option value="monthly">{t("Iuran bulanan")}</option>
                 </Select>
                 {record && <input type="hidden" name="kind" value={payKind} />}
@@ -321,17 +382,24 @@ function RecordForm({
                   <Input type="month" name="period" required defaultValue={val("period", today().slice(0, 7))} />
                 </Field>
               )}
-              <Field label={t("Tanggal dibayar")} error={fe.paidOn} className={payKind === "monthly" ? "" : "sm:col-span-2"}>
-                <Input type="date" name="paidOn" required defaultValue={val("paidOn", today())} />
+              <Field
+                label={t("Tanggal dibayar")}
+                error={fe.paidOn}
+                className={payKind === "monthly" ? "" : "sm:col-span-2"}
+                hint={
+                  payKind === "registration" && paidOn.length >= 7
+                    ? t("Registrasi sudah termasuk iuran bulan {month}.", { month: fmt.date(`${paidOn.slice(0, 7)}-01`, { month: "long", year: "numeric" }) })
+                    : undefined
+                }
+              >
+                <Input type="date" name="paidOn" required value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
               </Field>
-              <Field label={t("Uang yang dibayar")} error={fe.amount} className={payKind === "jersey" ? "sm:col-span-2" : ""}>
+              <Field label={t("Uang yang dibayar")} error={fe.amount}>
                 <MoneyInput name="amount" required defaultValue={val("amount")} invalid={!!fe.amount} />
               </Field>
-              {payKind !== "jersey" && (
-                <Field label={t("Diskon")} error={fe.discount} hint={t("Potongan yang diberikan. Opsional.")}>
-                  <MoneyInput name="discount" defaultValue={val("discount")} invalid={!!fe.discount} />
-                </Field>
-              )}
+              <Field label={t("Diskon")} error={fe.discount} hint={t("Potongan yang diberikan. Opsional.")}>
+                <MoneyInput name="discount" defaultValue={val("discount")} invalid={!!fe.discount} />
+              </Field>
               <div className="sm:col-span-2">
                 <DocumentUpload name="proofUrl" label={t("Bukti pembayaran")} defaultValue={val("proofUrl")} error={fe.proofUrl} icon={Receipt} />
               </div>
@@ -353,6 +421,12 @@ function RecordForm({
             <Field label={t("Keterangan")} error={fe.name} hint={t("mis. Sewa lapangan, bola latihan")}>
               <Input name="name" required maxLength={200} defaultValue={val("name")} />
             </Field>
+            <AssetRadio
+              value={assetKind}
+              onChange={setAssetKind}
+              error={fe.assetType}
+              hint={assetKind === "asset" ? t("Pengeluaran ini otomatis tercatat juga di menu Aset.") : t("Hanya tercatat sebagai pengeluaran.")}
+            />
             <div className="sm:col-span-2">
               <DocumentUpload name="proofUrl" label={t("Bukti pengeluaran (struk)")} defaultValue={val("proofUrl")} error={fe.proofUrl} icon={Receipt} />
             </div>
@@ -384,9 +458,83 @@ function RecordForm({
             <Field label={t("Harga satuan")} error={fe.unitPrice}>
               <MoneyInput name="unitPrice" required defaultValue={val("unitPrice")} invalid={!!fe.unitPrice} onValueChange={setPrice} />
             </Field>
-            <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-ink-secondary sm:col-span-2">
+            <p className="border border-line bg-surface-2 px-3 py-2 text-xs text-ink-secondary sm:col-span-2">
               {t("Total baris")}: <span className="font-semibold tabular-nums text-ink">{fmt.number(qty)} × {fmt.rupiah(price)} = {fmt.rupiah(qty * price)}</span>
             </p>
+            <AssetRadio
+              value={assetKind}
+              onChange={setAssetKind}
+              error={fe.assetType}
+              hint={
+                assetKind === "asset"
+                  ? t("Baris ini otomatis masuk ke menu Aset senilai {amount}.", { amount: fmt.rupiah(qty * price * (period === "weekly" ? ctx.programWeeks ?? 1 : 1)) })
+                  : t("Hanya menjadi anggaran, tidak masuk ke menu Aset.")
+              }
+            />
+            <p role="note" className="border border-ink bg-surface-2 px-3 py-2 text-xs font-semibold text-ink sm:col-span-2">
+              {t("Periksa dulu: baris RAB yang sudah disimpan tidak dapat diubah lagi.")}
+            </p>
+          </Section>
+        )}
+
+        {kind === "actualitem" && (
+          <Section title={t("Keterangan biaya")}>
+            <Field label={t("Jenis biaya")} error={fe.period} className="sm:col-span-2" hint={t("Mingguan atau bulanan: menentukan bagian halaman RAB Actual tempat baris ini muncul.")}>
+              <Select name="period" defaultValue={val("period", "weekly")}>
+                <option value="weekly">{t("Mingguan — berulang tiap minggu")}</option>
+                <option value="monthly">{t("Bulanan — dihitung sekali")}</option>
+              </Select>
+            </Field>
+            <Field label={t("Kategori")} error={fe.category} hint={t("Pilih yang sudah ada atau ketik kategori baru.")}>
+              <Input name="category" required maxLength={160} list="finance-actual-categories" defaultValue={val("category")} />
+            </Field>
+            <Field label={t("Nama biaya")} error={fe.name} hint={t("mis. Sewa HT")}>
+              <Input name="name" required maxLength={200} defaultValue={val("name")} />
+            </Field>
+          </Section>
+        )}
+
+        {kind === "actualcost" && (
+          <Section title={t("Biaya actual")}>
+            <Field label={t("Keterangan biaya")} error={fe.itemRef} className="sm:col-span-2">
+              <Select name="itemRef" required defaultValue={val("itemRef")}>
+                <option value="" disabled>
+                  {t("Pilih keterangan biaya")}
+                </option>
+                {[...new Set((ctx.actualLines ?? []).map((l) => `${l.period}|${l.category}`))].map((group) => {
+                  const [linePeriod, ...rest] = group.split("|");
+                  const category = rest.join("|");
+                  return (
+                    <optgroup key={group} label={`${linePeriod === "weekly" ? t("Mingguan") : t("Bulanan")} · ${category}`}>
+                      {(ctx.actualLines ?? []).filter((l) => l.period === linePeriod && l.category === category).map((l) => (
+                        <option key={l.key} value={l.key}>
+                          {l.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </Select>
+            </Field>
+            <Field label={t("Actual biaya")} error={fe.amount} hint={t("Uang yang benar-benar dikeluarkan.")}>
+              <MoneyInput name="amount" required defaultValue={val("amount")} invalid={!!fe.amount} />
+            </Field>
+            <Field
+              label={t("Tanggal biaya")}
+              error={fe.spentOn}
+              hint={
+                ctx.programStart && spentOn
+                  ? weekNumber(ctx.programStart, spentOn) >= 1
+                    ? t("Masuk ke kolom minggu ke-{n}.", { n: weekNumber(ctx.programStart, spentOn) })
+                    : t("Sebelum minggu ke-1 program.")
+                  : t("Minggu dihitung dari tanggal ini.")
+              }
+            >
+              <Input type="date" name="spentOn" required value={spentOn} onChange={(e) => setSpentOn(e.target.value)} />
+            </Field>
+            <div className="sm:col-span-2">
+              <DocumentUpload name="proofUrl" label={t("Bukti pembayaran")} defaultValue={val("proofUrl")} error={fe.proofUrl} icon={Receipt} />
+            </div>
           </Section>
         )}
 
@@ -402,6 +550,12 @@ function RecordForm({
       )}
       {kind === "expense" && (
         <datalist id="finance-expense-categories">{(ctx.expenseCategories ?? []).map((c) => <option key={c} value={c} />)}</datalist>
+      )}
+      {(kind === "registration" || kind === "matchfee") && (
+        <datalist id="finance-age-groups">{(ctx.ageGroups ?? []).map((g) => <option key={g} value={g} />)}</datalist>
+      )}
+      {kind === "actualitem" && (
+        <datalist id="finance-actual-categories">{(ctx.actualCategories ?? []).map((c) => <option key={c} value={c} />)}</datalist>
       )}
       {(kind === "registration" || kind === "matchfee") && (
         <datalist id="finance-clubs">{(ctx.clubs ?? []).map((c) => <option key={c} value={c} />)}</datalist>
@@ -423,7 +577,7 @@ function RecordForm({
         </Button>
         {record && kind === "matchfee" && ctx.canDelete && (
           <span className="ml-auto">
-            <DeleteRecordButton kind={kind} id={record.id} name={String(record.clubName ?? "")} />
+            <DeleteRecordButton kind={kind} id={record.id} name={`${record.ageGroup ? record.ageGroup + " " : ""}${record.clubName ?? ""}`} />
           </span>
         )}
       </div>

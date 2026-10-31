@@ -4,6 +4,7 @@ import { loadUnitPage } from "@/lib/finance/access";
 import { listAssets } from "@/lib/finance/queries";
 import { cumulativeByDate, sum } from "@/lib/finance/calc";
 import { PageHeader } from "@/components/app/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/misc";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AssetsPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  const { unit, form, canInput, canDelete } = await loadUnitPage(code, "liga");
+  const { unit, form, canInput, canDelete } = await loadUnitPage(code);
   const { t, fmt } = await getI18n();
 
   const rows = await listAssets(unit.id);
@@ -66,12 +67,13 @@ export default async function AssetsPage({ params }: { params: Promise<{ code: s
       <GuideCard
         id="aset"
         title={t("Cara membaca halaman Aset")}
-        intro={t("Aset adalah barang yang dibeli unit bisnis untuk menjalankan pertandingan, misalnya dispenser, sound system, atau meja lipat. Setiap pembelian dicatat sekali: kapan dibeli, apa, berapa harganya, dan struk buktinya.")}
+        intro={t("Aset adalah barang yang dimiliki unit bisnis, misalnya dispenser, sound system, atau meja lipat. Setiap pembelian dicatat sekali: kapan dibeli, apa, berapa harganya, dan struk buktinya. Baris RAB atau pengeluaran yang ditandai Aset masuk ke sini otomatis.")}
         terms={[
           { term: t("Tanggal"), text: t("Hari barang dibeli.") },
           { term: t("Sarana pertandingan"), text: t("Nama barang yang dibeli.") },
           { term: t("Nominal"), text: t("Harga yang dibayarkan, dalam Rupiah.") },
           { term: t("Bukti"), text: t("Foto atau scan struk. “Belum ada bukti” berarti struknya belum diunggah.") },
+          { term: t("Otomatis"), text: t("Baris bertanda “Dari RAB” atau “Dari pengeluaran” dibuat otomatis dan mengikuti sumbernya, jadi tidak dapat diubah di sini.") },
         ]}
         tip={canInput ? t("Klik ikon pensil untuk memperbaiki sebuah baris, atau chip hijau “Lihat bukti” untuk membuka struknya.") : t("Klik chip hijau “Lihat bukti” untuk membuka struk pembelian.")}
       />
@@ -164,6 +166,8 @@ export default async function AssetsPage({ params }: { params: Promise<{ code: s
                     <TD className="whitespace-nowrap tabular-nums">{fmt.date(r.purchasedOn)}</TD>
                     <TD>
                       <span className="font-medium text-ink">{r.name}</span>
+                      {r.budgetItemId && <Badge className="ml-2 align-middle" tone="info">{t("Dari RAB")}</Badge>}
+                      {r.expenseId && <Badge className="ml-2 align-middle" tone="info">{t("Dari pengeluaran")}</Badge>}
                       {r.note && <span className="block text-[11px] text-ink-muted">{r.note}</span>}
                     </TD>
                     <TD className="text-right font-medium tabular-nums text-ink">{fmt.rupiah(r.amount)}</TD>
@@ -171,8 +175,8 @@ export default async function AssetsPage({ params }: { params: Promise<{ code: s
                     {(canInput || canDelete) && (
                       <TD>
                         <div className="flex justify-end gap-0.5">
-                          {canInput && <EditRecordButton kind="asset" record={record(r)} ctx={form} />}
-                          {canDelete && <DeleteRecordButton kind="asset" id={r.id} name={r.name} />}
+                          {canInput && !r.budgetItemId && !r.expenseId && <EditRecordButton kind="asset" record={record(r)} ctx={form} />}
+                          {canDelete && !r.budgetItemId && !r.expenseId && <DeleteRecordButton kind="asset" id={r.id} name={r.name} />}
                         </div>
                       </TD>
                     )}

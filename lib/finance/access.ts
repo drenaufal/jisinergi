@@ -18,6 +18,8 @@ export type UnitInfo = {
   type: UnitType;
   description: string | null;
   programWeeks: number;
+  /** Liga: the day week 1 starts (null = the week of the first real cost). */
+  programStartsOn: string | null;
   active: boolean;
 };
 
@@ -28,6 +30,7 @@ const unitColumns = {
   type: businessUnits.type,
   description: businessUnits.description,
   programWeeks: businessUnits.programWeeks,
+  programStartsOn: businessUnits.programStartsOn,
   active: businessUnits.active,
 };
 

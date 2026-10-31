@@ -3,13 +3,22 @@ import type { AnyMySqlColumn, MySqlTable } from "drizzle-orm/mysql-core";
 import type { MySql2Database } from "drizzle-orm/mysql2";
 import { hash } from "bcryptjs";
 import * as s from "@/lib/db/schema";
-import { SEED_ASSETS, SEED_BUDGET, SEED_CAPITAL, SEED_DIVIDENDS, SEED_MATCH_FEES, SEED_REGISTRATIONS } from "./seed-data";
+import {
+  SEED_ACTUAL_COSTS,
+  SEED_ACTUAL_EXTRA,
+  SEED_ASSETS,
+  SEED_BUDGET,
+  SEED_CAPITAL,
+  SEED_DIVIDENDS,
+  SEED_MATCH_FEES,
+  SEED_REGISTRATIONS,
+} from "./seed-data";
 import {
   DEMO_EXPENSES,
-  DEMO_JERSEY_PRICE,
   DEMO_MONTHLY_DISCOUNT,
   DEMO_MONTHLY_FEE,
   DEMO_MONTHLY_PAID,
+  DEMO_OWNERS,
   DEMO_REGISTRATION_DISCOUNT,
   DEMO_REGISTRATION_FEE,
   DEMO_STUDENTS,
@@ -84,9 +93,21 @@ export async function seedDemo(db: AnyDb, options: DemoSeedOptions = {}): Promis
   }
 
   const liga = DEMO_LIGA.code;
+  // real costs point at RAB lines, so a reset has to clear them before the RAB lines go
+  if (options.reset && !dryRun && !createdNow.has(liga)) {
+    await db.delete(s.finActualCosts).where(eq(s.finActualCosts.businessUnitId, idByCode.get(liga)!));
+    await db.delete(s.finActualItems).where(eq(s.finActualItems.businessUnitId, idByCode.get(liga)!));
+  }
   await load("fin_assets", liga, s.finAssets, SEED_ASSETS.map((r) => ({ purchasedOn: r.purchasedOn, name: r.name, amount: r.amount })));
   await load("fin_capital", liga, s.finCapital, SEED_CAPITAL.map((r) => ({ ownerName: r.owner, amount: r.amount, status: r.status })));
-  await load("fin_dividends", liga, s.finDividends, SEED_DIVIDENDS.map((r) => ({ recipientName: r.recipient, amount: r.amount })));
+  // the workbook's dividend split (70 / 30) becomes the unit's owners and their shares
+  const dividendTotal = SEED_DIVIDENDS.reduce((sum, d) => sum + d.amount, 0);
+  await load(
+    "fin_unit_owners",
+    liga,
+    s.finUnitOwners,
+    SEED_DIVIDENDS.map((r, i) => ({ name: r.recipient, shareBp: Math.round((r.amount / dividendTotal) * 10000), position: i + 1 })),
+  );
   await load("fin_registrations", liga, s.finRegistrations, SEED_REGISTRATIONS.map((r) => ({ clubName: r.club, fee: r.fee, dpAmount: r.dp, finalAmount: r.final })));
   await load("fin_match_fees", liga, s.finMatchFees, SEED_MATCH_FEES.map((r) => ({ clubName: r.club, week: r.week, matches: r.matches, feePerMatch: r.fee })));
   await load(
@@ -104,6 +125,30 @@ export async function seedDemo(db: AnyDb, options: DemoSeedOptions = {}): Promis
     })),
   );
 
+  /* ── RAB Actual: real costs on RAB lines (matched by name) and one extra line ── */
+  {
+    const unitId = idByCode.get(liga)!;
+    const existing = createdNow.has(liga) ? [] : await db.select({ id: s.finActualCosts.id }).from(s.finActualCosts).where(eq(s.finActualCosts.businessUnitId, unitId));
+    if (existing.length) {
+      report.tables.push({ table: "fin_actual_costs", unit: liga, action: "skipped", rows: 0, existing: existing.length });
+    } else {
+      const total = SEED_ACTUAL_COSTS.length + 1;
+      if (!dryRun) {
+        const lines = await db.select({ id: s.finBudgetItems.id, name: s.finBudgetItems.name }).from(s.finBudgetItems).where(eq(s.finBudgetItems.businessUnitId, unitId));
+        const byName = new Map(lines.map((l) => [l.name, l.id]));
+        const extraId = crypto.randomUUID();
+        await db.insert(s.finActualItems).values({ id: extraId, businessUnitId: unitId, category: SEED_ACTUAL_EXTRA.category, name: SEED_ACTUAL_EXTRA.name });
+        await db.insert(s.finActualCosts).values([
+          ...SEED_ACTUAL_COSTS.flatMap((c) =>
+            byName.has(c.line) ? [{ id: crypto.randomUUID(), businessUnitId: unitId, budgetItemId: byName.get(c.line)!, spentOn: c.spentOn, amount: c.amount, note: c.note ?? null }] : [],
+          ),
+          { id: crypto.randomUUID(), businessUnitId: unitId, actualItemId: extraId, spentOn: SEED_ACTUAL_EXTRA.spentOn, amount: SEED_ACTUAL_EXTRA.amount },
+        ]);
+      }
+      report.tables.push({ table: "fin_actual_costs", unit: liga, action: "inserted", rows: total, existing: 0 });
+    }
+  }
+
   /* ── Sekolah Bola: students first (payments refer to them) ── */
   const school = DEMO_SCHOOL.code;
   const schoolId = idByCode.get(school)!;
@@ -116,11 +161,13 @@ export async function seedDemo(db: AnyDb, options: DemoSeedOptions = {}): Promis
   } else {
     const payments = DEMO_STUDENTS.flatMap((student, i) => {
       const base = { studentId: studentIds[i], businessUnitId: schoolId };
+      // the registration fee already includes the monthly fee of the month it is paid in
+      const registrationMonth = student.joinedOn.slice(0, 7);
       const rows: object[] = [
-        { ...base, kind: "registration", paidOn: student.joinedOn, amount: DEMO_REGISTRATION_FEE - (DEMO_REGISTRATION_DISCOUNT[i] ?? 0), discount: DEMO_REGISTRATION_DISCOUNT[i] ?? 0, period: null },
-        { ...base, kind: "jersey", paidOn: student.joinedOn, amount: DEMO_JERSEY_PRICE, discount: 0, period: null },
+        { ...base, kind: "registration", paidOn: student.joinedOn, amount: DEMO_REGISTRATION_FEE - (DEMO_REGISTRATION_DISCOUNT[i] ?? 0), discount: DEMO_REGISTRATION_DISCOUNT[i] ?? 0, period: registrationMonth },
       ];
       for (const period of DEMO_MONTHLY_PAID[i]) {
+        if (period === registrationMonth) continue;
         rows.push({
           ...base,
           kind: "monthly",
@@ -144,7 +191,21 @@ export async function seedDemo(db: AnyDb, options: DemoSeedOptions = {}): Promis
     report.tables.push({ table: "fin_students", unit: school, action: replaceSchool ? "replaced" : "inserted", rows: DEMO_STUDENTS.length, existing: hasStudents.length });
     report.tables.push({ table: "fin_student_payments", unit: school, action: replaceSchool ? "replaced" : "inserted", rows: payments.length, existing: 0 });
   }
-  await load("fin_expenses", school, s.finExpenses, DEMO_EXPENSES.map((e) => ({ spentOn: e.spentOn, category: e.category, name: e.name, amount: e.amount })));
+  const expenseRows = DEMO_EXPENSES.map((e) => ({ id: crypto.randomUUID(), spentOn: e.spentOn, category: e.category, name: e.name, amount: e.amount, isAsset: !!e.isAsset }));
+  await load("fin_expenses", school, s.finExpenses, expenseRows);
+  // asset expenses also live in the Aset menu (replacing the expenses removed their assets with them)
+  const expensesLoaded = report.tables[report.tables.length - 1];
+  const assetRows = expenseRows.filter((e) => e.isAsset);
+  if (expensesLoaded.action !== "skipped") {
+    if (!dryRun && assetRows.length) {
+      await db.insert(s.finAssets).values(
+        assetRows.map((e) => ({ id: crypto.randomUUID(), businessUnitId: schoolId, expenseId: e.id, purchasedOn: e.spentOn, name: e.name.slice(0, 160), amount: e.amount })),
+      );
+    }
+    report.tables.push({ table: "fin_assets", unit: school, action: expensesLoaded.action, rows: assetRows.length, existing: 0 });
+  }
+  await load("fin_unit_owners", school, s.finUnitOwners, DEMO_OWNERS.map((o, i) => ({ name: o.name, shareBp: o.shareBp, position: i + 1 })));
+  await load("fin_capital", school, s.finCapital, DEMO_OWNERS.map((o) => ({ ownerName: o.name, amount: o.capital, status: "outstanding", investedOn: "2026-08-01" })));
 
   /* ── logins (only when a password is supplied) ── */
   if (options.accountPassword) {

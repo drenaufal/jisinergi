@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CapitalPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  const { unit, form, canInput, canDelete } = await loadUnitPage(code, "liga");
+  const { unit, form, canInput, canDelete } = await loadUnitPage(code);
   const { t, fmt } = await getI18n();
 
   const rows = await listCapital(unit.id);

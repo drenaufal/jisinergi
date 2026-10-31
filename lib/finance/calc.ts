@@ -65,6 +65,10 @@ export type BudgetLine = {
 
 export const budgetLineTotal = (line: Pick<BudgetLine, "quantity" | "unitPrice">) => line.quantity * line.unitPrice;
 
+/** What a line costs over the whole program: a weekly line repeats every match week, a monthly one counts once. */
+export const budgetLineProgramTotal = (line: Pick<BudgetLine, "period" | "quantity" | "unitPrice">, programWeeks: number) =>
+  budgetLineTotal(line) * (line.period === "weekly" ? programWeeks : 1);
+
 export type BudgetGroup<T extends BudgetLine> = {
   period: T["period"];
   category: string;
@@ -140,11 +144,6 @@ export function capitalSummary(rows: readonly { amount: number; status: "outstan
   return { total, returned, outstanding: total - returned, returnedShare: share(returned, total) };
 }
 
-/** Each recipient's portion of `grandTotal` (the unit's recorded dividends). */
-export function dividendShares<T extends { amount: number }>(rows: readonly T[], grandTotal: number) {
-  return rows.map((row) => ({ row, share: share(row.amount, grandTotal) }));
-}
-
 /* ── Ringkasan ──────────────────────────────────────────────────────── */
 
 export type UnitFigures = {
@@ -152,8 +151,9 @@ export type UnitFigures = {
   assets: { total: number; count: number; withProof: number };
   registration: { billed: number; received: number; remaining: number; clubs: number; paidClubs: number };
   matchFee: { amount: number; matches: number; weeksPlayed: number };
+  /** Stand rent, parking tickets… — shown next to the income, but not part of the dividend formula. */
+  otherIncome: { total: number; count: number };
   budget: BudgetTotals & { lines: number };
-  dividends: { total: number; count: number };
   /** Everything received from clubs: registration payments + match fees. */
   income: number;
   /** Income as a share of the budget (can exceed 1). */
@@ -166,9 +166,9 @@ export type UnitDataset = {
   programWeeks: number;
   assets: { amount: number; proofUrl: string | null }[];
   capital: { amount: number; status: "outstanding" | "returned" }[];
-  dividends: { amount: number }[];
   registrations: RegistrationAmounts[];
   matchFees: (MatchFeeAmounts & { week: number })[];
+  otherIncome?: { amount: number }[];
   budget: BudgetLine[];
 };
 
@@ -221,8 +221,8 @@ export function unitFigures(data: UnitDataset): UnitFigures {
       matches: sum(data.matchFees, (m) => m.matches),
       weeksPlayed: playedWeeks(data.matchFees),
     },
+    otherIncome: { total: sum(data.otherIncome ?? [], (o) => o.amount), count: (data.otherIncome ?? []).length },
     budget: { ...budget, lines: data.budget.length },
-    dividends: { total: sum(data.dividends, (d) => d.amount), count: data.dividends.length },
     income,
     budgetCoverage: share(income, budget.total),
     dividend: ligaDividend({ budget: budget.total, capital: capital.total, registration: received, matchFee: matchFeeTotal }),
@@ -231,7 +231,11 @@ export function unitFigures(data: UnitDataset): UnitFigures {
 
 /* ── Sekolah Bola ───────────────────────────────────────────────────── */
 
-export type PaymentKind = "registration" | "jersey" | "monthly";
+/**
+ * What a student pays the school. Jersey money is not income and is no longer recorded (old `jersey` rows
+ * are filtered out when payments are read), so only these two kinds exist here.
+ */
+export type PaymentKind = "registration" | "monthly";
 
 export type PaymentAmounts = { studentId: string; kind: PaymentKind; paidOn: string; amount: number; discount: number; period: string | null };
 export type ExpenseAmounts = { spentOn: string; category: string; amount: number };
@@ -239,16 +243,20 @@ export type ExpenseAmounts = { spentOn: string; category: string; amount: number
 /** "2026-03-14" → "2026-03". */
 export const monthOf = (isoDate: string) => isoDate.slice(0, 7);
 
+/**
+ * The month a payment pays for. A monthly fee names its month; the registration fee already includes the
+ * fee of the month it was paid in, so it covers that month too (rows saved before this rule have no period).
+ */
+export const coveredMonth = (p: Pick<PaymentAmounts, "kind" | "paidOn" | "period">) => p.period ?? (p.kind === "registration" ? monthOf(p.paidOn) : null);
+
 export function incomeByKind(payments: readonly PaymentAmounts[]) {
   const of = (kind: PaymentKind) => payments.filter((p) => p.kind === kind);
   const registration = sum(of("registration"), (p) => p.amount);
-  const jersey = sum(of("jersey"), (p) => p.amount);
   const monthly = sum(of("monthly"), (p) => p.amount);
   return {
     registration,
-    jersey,
     monthly,
-    total: registration + jersey + monthly,
+    total: registration + monthly,
     discounts: sum(payments, (p) => p.discount),
   };
 }
@@ -277,20 +285,34 @@ export type SchoolFigures = {
   students: number;
   income: ReturnType<typeof incomeByKind>;
   expense: number;
-  /** Pemasukan − Pengeluaran over every month so far. */
+  /** Sisa saldo = Pemasukan − Pengeluaran over every month so far. It is also the school's dividend. */
   dividend: number;
   months: MonthRow[];
+  /** Everything the school owns: assets bought directly or through an asset expense. */
+  assets: { total: number; count: number };
+  /** Modal put in by the owners. */
+  capital: ReturnType<typeof capitalSummary> & { count: number };
 };
 
-export function schoolFigures(input: { students: number; payments: readonly PaymentAmounts[]; expenses: readonly ExpenseAmounts[] }): SchoolFigures {
+export function schoolFigures(input: {
+  students: number;
+  payments: readonly PaymentAmounts[];
+  expenses: readonly ExpenseAmounts[];
+  assets?: readonly { amount: number }[];
+  capital?: readonly { amount: number; status: "outstanding" | "returned" }[];
+}): SchoolFigures {
   const income = incomeByKind(input.payments);
   const expense = sum(input.expenses, (e) => e.amount);
+  const assets = input.assets ?? [];
+  const capital = input.capital ?? [];
   return {
     students: input.students,
     income,
     expense,
     dividend: income.total - expense,
     months: schoolMonthly(input.payments, input.expenses),
+    assets: { total: sum(assets, (a) => a.amount), count: assets.length },
+    capital: { ...capitalSummary(capital), count: capital.length },
   };
 }
 
@@ -299,7 +321,7 @@ export function incomeMonthsByKind(payments: readonly PaymentAmounts[]) {
   const months = new Map<string, Record<PaymentKind, number>>();
   for (const p of payments) {
     const m = monthOf(p.paidOn);
-    const r = months.get(m) ?? { registration: 0, jersey: 0, monthly: 0 };
+    const r = months.get(m) ?? { registration: 0, monthly: 0 };
     r[p.kind] += p.amount;
     months.set(m, r);
   }
@@ -313,15 +335,14 @@ export function expenseByCategory(expenses: readonly ExpenseAmounts[]) {
   return [...map.entries()].map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
 }
 
-/** Per student: which payments they have made, and whether this month's fee is in. */
+/** Per student: which payments they have made, and whether this month's fee is in (a registration covers its own month). */
 export function studentStatus(payments: readonly PaymentAmounts[], studentId: string, currentMonth: string) {
   const mine = payments.filter((p) => p.studentId === studentId);
-  const monthly = mine.filter((p) => p.kind === "monthly");
+  const months = mine.map(coveredMonth).filter((m): m is string => !!m);
   return {
     registered: mine.some((p) => p.kind === "registration"),
-    jerseys: mine.filter((p) => p.kind === "jersey").length,
-    paidThisMonth: monthly.some((p) => p.period === currentMonth),
-    lastMonthly: monthly.map((p) => p.period).filter((p): p is string => !!p).sort().at(-1) ?? null,
+    paidThisMonth: months.includes(currentMonth),
+    lastMonthly: [...months].sort().at(-1) ?? null,
     totalPaid: sum(mine, (p) => p.amount),
     totalDiscount: sum(mine, (p) => p.discount),
   };
@@ -350,3 +371,172 @@ export function ownerDividend(input: { liga: number; sekolahBola: number; target
     remaining: Math.max(0, input.target - accumulated),
   };
 }
+
+/* ── RAB Actual ─────────────────────────────────────────────────────── */
+
+const DAY_MS = 86_400_000;
+/** Whole days since 1970-01-01 for a YYYY-MM-DD date (UTC, so daylight saving cannot shift it). */
+const dayNumber = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return Math.floor(Date.UTC(y, m - 1, d) / DAY_MS);
+};
+const isoOfDay = (day: number) => new Date(day * DAY_MS).toISOString().slice(0, 10);
+
+/** The Monday of the week a date falls in. */
+export function mondayOf(iso: string) {
+  const day = dayNumber(iso);
+  const weekday = new Date(day * DAY_MS).getUTCDay(); // 0 = Sunday
+  return isoOfDay(day - ((weekday + 6) % 7));
+}
+
+/** Program week of a date: the `start` day opens week 1. Dates before the start give 0 or a negative number. */
+export const weekNumber = (start: string, date: string) => Math.floor((dayNumber(date) - dayNumber(start)) / 7) + 1;
+
+/** The date a program week begins on (week 1 begins on `start`). */
+export const weekStartDate = (start: string, week: number) => isoOfDay(dayNumber(start) + 7 * (week - 1));
+
+/** First day of week 1: the date the unit set, else the Monday of its earliest cost, else nothing yet. */
+export function programStart(startsOn: string | null, costDates: readonly string[]): string | null {
+  if (startsOn) return startsOn;
+  const first = [...costDates].sort()[0];
+  return first ? mondayOf(first) : null;
+}
+
+/** One row of the RAB Actual grid: a RAB line (`b:<id>`) or a cost line added on that page (`a:<id>`). */
+export type ActualLineInput = {
+  key: string;
+  source: "budget" | "extra";
+  id: string;
+  category: string;
+  /** Orders the groups of a section: RAB categories in RAB order, then categories only the extra lines use. */
+  groupOrder: number;
+  name: string;
+  itemOrder: number;
+  /** Which part of the page the line sits in: weekly costs repeat every match week, monthly ones are one-off. */
+  period: "weekly" | "monthly";
+  /** The RAB line total (quantity × unit price): per match week for a weekly line, once for a monthly one. 0 for an extra line. */
+  budget: number;
+  isAsset: boolean;
+};
+export type ActualCostInput = { lineKey: string; amount: number; spentOn: string };
+
+export type ActualLine = ActualLineInput & {
+  /** The budget over the whole program (weekly × program weeks). */
+  programBudget: number;
+  /** Money spent per week bucket (0 = before week 1). */
+  byWeek: Record<number, number>;
+  total: number;
+  /** programBudget − total; negative = over budget. */
+  remaining: number;
+  costs: number;
+};
+export type ActualTotals = { budget: number; programBudget: number; byWeek: Record<number, number>; total: number; remaining: number };
+export type ActualGroup = ActualTotals & { category: string; lines: ActualLine[] };
+export type ActualSection = { period: "weekly" | "monthly"; groups: ActualGroup[]; totals: ActualTotals };
+export type ActualGrid = {
+  start: string | null;
+  /** Column headers: week numbers 1…n, preceded by 0 ("before the program") only when something was paid then. */
+  weeks: number[];
+  /** Weekly costs and monthly (one-off) costs are separate parts, each with its own categories and totals. */
+  weekly: ActualSection;
+  monthly: ActualSection;
+  /** Both parts together ("Total estimasi OPEX"). */
+  totals: ActualTotals;
+};
+
+const emptyTotals = (): ActualTotals => ({ budget: 0, programBudget: 0, byWeek: {}, total: 0, remaining: 0 });
+
+function addInto(target: ActualTotals, part: ActualTotals) {
+  target.budget += part.budget;
+  target.programBudget += part.programBudget;
+  target.total += part.total;
+  target.remaining += part.remaining;
+  for (const [w, amount] of Object.entries(part.byWeek)) target.byWeek[Number(w)] = (target.byWeek[Number(w)] ?? 0) + amount;
+}
+
+/**
+ * The RAB Actual grid: every cost line with its budget and, per program week, what was really spent
+ * (a cost lands in the week of its date, costs of one week add up). Weekly and monthly lines form two
+ * sections; inside a section lines are grouped by category, RAB lines first and in RAB order, then the
+ * extra lines. A category is the same group whichever page named it, whatever its case.
+ */
+export function buildActualGrid(
+  lines: readonly ActualLineInput[],
+  costs: readonly ActualCostInput[],
+  programWeeks: number,
+  startsOn: string | null,
+): ActualGrid {
+  const start = programStart(startsOn, costs.map((c) => c.spentOn));
+  const bucket = (date: string) => (start ? Math.max(0, weekNumber(start, date)) : 0);
+
+  const byKey = new Map<string, ActualLine>();
+  for (const l of lines) {
+    const programBudget = l.budget * (l.period === "weekly" ? programWeeks : 1);
+    byKey.set(l.key, { ...l, programBudget, byWeek: {}, total: 0, remaining: programBudget, costs: 0 });
+  }
+  let lastWeek = programWeeks;
+  let hasBefore = false;
+  for (const c of costs) {
+    const line = byKey.get(c.lineKey);
+    if (!line) continue;
+    const w = bucket(c.spentOn);
+    if (w === 0) hasBefore = true;
+    lastWeek = Math.max(lastWeek, w);
+    line.byWeek[w] = (line.byWeek[w] ?? 0) + c.amount;
+    line.total += c.amount;
+    line.remaining -= c.amount;
+    line.costs += 1;
+  }
+
+  const section = (period: "weekly" | "monthly"): ActualSection => {
+    const ordered = [...byKey.values()].filter((l) => l.period === period).sort((a, b) => a.groupOrder - b.groupOrder || a.itemOrder - b.itemOrder);
+    const groups = new Map<string, ActualGroup>();
+    for (const line of ordered) {
+      const key = line.category.toLowerCase();
+      let g = groups.get(key);
+      if (!g) groups.set(key, (g = { category: line.category, lines: [], ...emptyTotals() }));
+      g.lines.push(line);
+      addInto(g, line);
+    }
+    const list = [...groups.values()];
+    const totals = emptyTotals();
+    for (const g of list) addInto(totals, g);
+    return { period, groups: list, totals };
+  };
+
+  const weekly = section("weekly");
+  const monthly = section("monthly");
+  const totals = emptyTotals();
+  addInto(totals, weekly.totals);
+  addInto(totals, monthly.totals);
+  const weeks = [...(hasBefore ? [0] : []), ...Array.from({ length: lastWeek }, (_, i) => i + 1)];
+  return { start, weeks, weekly, monthly, totals };
+}
+
+/**
+ * How the weekly costs did against their weekly budget up to week `upToWeek` (the weeks that have started).
+ * Positive `difference` = spent more than budgeted. Mirrors the "selisih" rows of the Excel sheet.
+ */
+export function weeklyVariance(weekly: ActualSection, upToWeek: number) {
+  const weeks = Array.from({ length: Math.max(0, upToWeek) }, (_, i) => i + 1);
+  const budgetPerWeek = weekly.totals.budget;
+  const actual = sum(weeks, (w) => weekly.totals.byWeek[w] ?? 0);
+  return {
+    weeks: weeks.length,
+    budgetPerWeek,
+    budget: budgetPerWeek * weeks.length,
+    actual,
+    difference: actual - budgetPerWeek * weeks.length,
+    average: weeks.length ? Math.round(actual / weeks.length) : 0,
+    /** Per week: actual − weekly budget. */
+    perWeek: Object.fromEntries(weeks.map((w) => [w, (weekly.totals.byWeek[w] ?? 0) - budgetPerWeek])) as Record<number, number>,
+  };
+}
+
+/* ── Age groups ─────────────────────────────────────────────────────── */
+
+/** "U8" before "U9" before "U10"; rows without a group go last. */
+export const compareAgeGroups = (a: string, b: string) => (a === b ? 0 : a === "" ? 1 : b === "" ? -1 : a.localeCompare(b, "id", { numeric: true }));
+
+/** The label of a team: "U8 · BSS Jakarta", or just the club when the league has no groups. */
+export const teamLabel = (team: { ageGroup: string; clubName: string }) => (team.ageGroup ? `${team.ageGroup} · ${team.clubName}` : team.clubName);

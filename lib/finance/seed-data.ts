@@ -25,6 +25,28 @@ export const SEED_DIVIDENDS: { recipient: string; amount: number }[] = [
   { recipient: "B", amount: 30000000 },
 ];
 
+/**
+ * Demo RAB Actual: money really spent on RAB lines (matched by name) in the first three match weeks, plus one
+ * cost line that is not in the RAB. A date in week 1 is a Friday: the unit's week 1 starts the Monday before.
+ */
+export const SEED_ACTUAL_COSTS: { line: string; spentOn: string; amount: number; note?: string }[] = [
+  { line: "Sewa Lapangan", spentOn: "2026-10-02", amount: 4686000 },
+  { line: "Sewa Lapangan", spentOn: "2026-10-09", amount: 4686000 },
+  { line: "Sewa Lapangan", spentOn: "2026-10-16", amount: 4686000 },
+  { line: "Honorium Wasit dan Hakim Garis", spentOn: "2026-10-02", amount: 1400000 },
+  { line: "Honorium Wasit dan Hakim Garis", spentOn: "2026-10-09", amount: 1500000, note: "Ada tambahan satu pertandingan" },
+  { line: "Honorium Wasit dan Hakim Garis", spentOn: "2026-10-16", amount: 1400000 },
+  { line: "Ambulance", spentOn: "2026-10-02", amount: 800000 },
+  { line: "Ambulance", spentOn: "2026-10-09", amount: 800000 },
+  { line: "Makan", spentOn: "2026-10-02", amount: 800000 },
+  { line: "Makan", spentOn: "2026-10-09", amount: 760000 },
+  { line: "Makan", spentOn: "2026-10-16", amount: 820000 },
+  { line: "Dispenser Minum", spentOn: "2026-10-02", amount: 1050000 },
+];
+
+/** A cost that was not in the RAB (an extra line of RAB Actual). */
+export const SEED_ACTUAL_EXTRA = { category: "Biaya Peralatan & Sarana Pertandingan", name: "Sewa HT", spentOn: "2026-10-09", amount: 100000 };
+
 /** `fee` is the registration fee billed; `dp` and `final` are what the club has paid so far. */
 export const SEED_REGISTRATIONS: { club: string; fee: number; dp: number; final: number }[] = [
   { club: "CYSSS", fee: 1750000, dp: 750000, final: 0 },
