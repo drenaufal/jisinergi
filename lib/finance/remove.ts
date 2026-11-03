@@ -25,16 +25,21 @@ export async function removeUnit(db: AnyDb, code: string, options: { dryRun?: bo
   if (!unit) return report;
   const unitId = unit.id;
 
+  // children before the rows they point at: real costs refer to RAB / extra lines, assets to RAB lines and expenses
   const tables = [
+    ["fin_actual_costs", s.finActualCosts],
+    ["fin_actual_items", s.finActualItems],
     ["fin_student_payments", s.finStudentPayments],
     ["fin_students", s.finStudents],
-    ["fin_expenses", s.finExpenses],
     ["fin_assets", s.finAssets],
+    ["fin_expenses", s.finExpenses],
     ["fin_capital", s.finCapital],
     ["fin_dividends", s.finDividends],
     ["fin_registrations", s.finRegistrations],
     ["fin_match_fees", s.finMatchFees],
+    ["fin_other_income", s.finOtherIncome],
     ["fin_budget_items", s.finBudgetItems],
+    ["fin_unit_owners", s.finUnitOwners],
   ] as const;
 
   // receipts referenced by the unit's rows
@@ -51,6 +56,8 @@ export async function removeUnit(db: AnyDb, code: string, options: { dryRun?: bo
   for (const r of await db.select({ u: s.finMatchFees.proofUrl }).from(s.finMatchFees).where(eq(s.finMatchFees.businessUnitId, unitId))) add(r.u);
   for (const r of await db.select({ u: s.finStudentPayments.proofUrl }).from(s.finStudentPayments).where(eq(s.finStudentPayments.businessUnitId, unitId))) add(r.u);
   for (const r of await db.select({ u: s.finExpenses.proofUrl }).from(s.finExpenses).where(eq(s.finExpenses.businessUnitId, unitId))) add(r.u);
+  for (const r of await db.select({ u: s.finOtherIncome.proofUrl }).from(s.finOtherIncome).where(eq(s.finOtherIncome.businessUnitId, unitId))) add(r.u);
+  for (const r of await db.select({ u: s.finActualCosts.proofUrl }).from(s.finActualCosts).where(eq(s.finActualCosts.businessUnitId, unitId))) add(r.u);
 
   const members = await db.select({ userId: s.businessUnitMembers.userId }).from(s.businessUnitMembers).where(eq(s.businessUnitMembers.businessUnitId, unitId));
   report.logins = members.length;

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowDownToLine, ArrowUpFromLine, CalendarCheck, HandCoins, Percent, Users } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, CalendarCheck, Landmark, Package, Percent, Scale, Users } from "lucide-react";
 import type { UnitInfo } from "@/lib/finance/access";
 import { schoolDataset } from "@/lib/finance/queries";
 import { expenseByCategory, schoolFigures, studentStatus } from "@/lib/finance/calc";
@@ -19,8 +19,8 @@ import { getI18n } from "@/lib/i18n/server";
 /** Summary of one Sekolah Bola unit: income, expenses and the monthly dividend. */
 export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
   const { fmt } = await getI18n();
-  const { students, payments, expenses } = await schoolDataset(unit.id);
-  const f = schoolFigures({ students: students.length, payments, expenses });
+  const { students, payments, expenses, assets, capital } = await schoolDataset(unit.id);
+  const f = schoolFigures({ students: students.length, payments, expenses, assets, capital });
   const link = (slug: string) => menuHref(unit.code, slug);
   const month = currentMonth();
   const paidThisMonth = students.filter((s) => studentStatus(payments, s.id, month).paidThisMonth).length;
@@ -30,16 +30,17 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
 
   return (
     <div>
-      <PageHeader eyebrow={unit.name} title="Ringkasan unit" description="Pemasukan dari siswa, pengeluaran sekolah, dan dividen per bulan." />
+      <PageHeader eyebrow={unit.name} title="Ringkasan unit" description="Pemasukan dari siswa, pengeluaran sekolah, aset, modal, dan sisa saldo per bulan." />
 
       <GuideCard
         id="ringkasan-sekolah"
         title="Cara membaca ringkasan ini"
-        intro="Sekolah Bola mencatat dua hal: uang yang masuk dari siswa (menu Pemasukan) dan uang yang dikeluarkan sekolah (menu Pengeluaran). Dividen adalah selisih keduanya, dihitung setiap bulan dan dijumlahkan."
+        intro="Sekolah Bola mencatat uang yang masuk dari siswa (menu Pemasukan) dan uang yang dikeluarkan sekolah (menu Pengeluaran). Sisa saldo adalah selisih keduanya, dihitung setiap bulan dan dijumlahkan. Pengeluaran yang ditandai Aset otomatis masuk ke menu Aset."
         terms={[
-          { term: "Pemasukan", text: "Registrasi, pembelian jersey, dan iuran bulanan yang sudah diterima." },
+          { term: "Pemasukan", text: "Registrasi dan iuran bulanan yang sudah diterima. Registrasi sudah termasuk iuran bulan itu; uang jersey tidak dicatat." },
           { term: "Pengeluaran", text: "Semua biaya yang dikeluarkan sekolah, menurut tanggal pengeluarannya." },
-          { term: "Dividen per bulan", text: "Pemasukan bulan itu dikurangi pengeluaran bulan itu. Bisa negatif jika pengeluaran lebih besar." },
+          { term: "Sisa saldo", text: "Pemasukan bulan itu dikurangi pengeluaran bulan itu (dividen per bulan). Bisa negatif jika pengeluaran lebih besar." },
+          { term: "Aset dan modal", text: "Aset adalah barang yang dimiliki sekolah; modal adalah uang yang disetor pemilik." },
           { term: "Diskon diberikan", text: "Potongan registrasi dan iuran. Hanya informasi — bukan bagian dari uang yang diterima." },
         ]}
       />
@@ -50,14 +51,16 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
         </Notice>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Link href={link("pemasukan")} className="block transition-transform hover:-translate-y-0.5">
-          <Kpi label="Pemasukan" value={fmt.rupiahCompact(f.income.total)} full={fmt.rupiah(f.income.total)} icon={<ArrowDownToLine className="size-4" />} block="red" hint={`Registrasi ${fmt.rupiahCompact(f.income.registration)} · jersey ${fmt.rupiahCompact(f.income.jersey)} · bulanan ${fmt.rupiahCompact(f.income.monthly)}`} />
+          <Kpi label="Pemasukan" value={fmt.rupiahCompact(f.income.total)} full={fmt.rupiah(f.income.total)} icon={<ArrowDownToLine className="size-4" />} block="red" hint={`Registrasi ${fmt.rupiahCompact(f.income.registration)} · bulanan ${fmt.rupiahCompact(f.income.monthly)}`} />
         </Link>
         <Link href={link("pengeluaran")} className="block transition-transform hover:-translate-y-0.5">
           <Kpi label="Pengeluaran" value={fmt.rupiahCompact(f.expense)} full={fmt.rupiah(f.expense)} icon={<ArrowUpFromLine className="size-4" />} block="blue" hint={`${fmt.number(expenses.length)} catatan pengeluaran`} />
         </Link>
-        <Kpi label="Dividen (akumulasi)" value={fmt.rupiahCompact(f.dividend)} full={fmt.rupiah(f.dividend)} icon={<HandCoins className="size-4" />} block="night" hint="Pemasukan − pengeluaran, semua bulan" />
+        <Link href={link("dividen")} className="block transition-transform hover:-translate-y-0.5">
+          <Kpi label="Sisa saldo" value={fmt.rupiahCompact(f.dividend)} full={fmt.rupiah(f.dividend)} icon={<Scale className="size-4" />} block="night" hint="Pemasukan − pengeluaran, semua bulan" />
+        </Link>
         <Link href={link("pemasukan")} className="block transition-transform hover:-translate-y-0.5">
           <Kpi label="Siswa terdaftar" value={fmt.number(students.length)} icon={<Users className="size-4" />} block="white" hint="Klik untuk melihat daftar siswa" />
         </Link>
@@ -70,19 +73,25 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
           hint={students.length > paidThisMonth ? `${fmt.number(students.length - paidThisMonth)} siswa belum membayar ${monthLabel(month)}` : `Semua siswa sudah membayar ${monthLabel(month)}`}
         />
         <Kpi label="Diskon diberikan" value={fmt.rupiahCompact(f.income.discounts)} full={fmt.rupiah(f.income.discounts)} icon={<Percent className="size-4" />} block="yellow" hint="Registrasi dan iuran bulanan" />
+        <Link href={link("aset")} className="block transition-transform hover:-translate-y-0.5">
+          <Kpi label="Aset" value={fmt.rupiahCompact(f.assets.total)} full={fmt.rupiah(f.assets.total)} icon={<Package className="size-4" />} block="white" hint={`${fmt.number(f.assets.count)} aset tercatat`} />
+        </Link>
+        <Link href={link("modal")} className="block transition-transform hover:-translate-y-0.5">
+          <Kpi label="Modal" value={fmt.rupiahCompact(f.capital.total)} full={fmt.rupiah(f.capital.total)} icon={<Landmark className="size-4" />} block="white" hint={`${fmt.rupiahCompact(f.capital.outstanding)} belum kembali`} />
+        </Link>
       </div>
 
       <Formula
         className="mt-4"
-        title="Perhitungan dividen — Sekolah Bola"
-        formula="Dividen per bulan = Pemasukan − Pengeluaran"
+        title="Perhitungan sisa saldo — Sekolah Bola"
+        formula="Sisa saldo per bulan = Pemasukan − Pengeluaran"
         lines={[
-          { label: "Total pemasukan", value: fmt.rupiah(f.income.total), href: link("pemasukan"), hint: "Registrasi + jersey + iuran bulanan" },
+          { label: "Total pemasukan", value: fmt.rupiah(f.income.total), href: link("pemasukan"), hint: "Registrasi + iuran bulanan" },
           { op: "−", label: "Total pengeluaran", value: fmt.rupiah(f.expense), href: link("pengeluaran") },
         ]}
-        resultLabel="Dividen (akumulasi)"
+        resultLabel="Sisa saldo (akumulasi)"
         result={fmt.rupiah(f.dividend)}
-        note="Tabel di bawah memecah angka ini per bulan. Hasil akumulasi ikut dijumlahkan ke dividen Owner."
+        note="Tabel di bawah memecah angka ini per bulan. Hasil akumulasi ikut dijumlahkan ke dividen Owner dan dibagi ke para pemilik di menu Dividen."
       />
 
       {f.months.length > 0 && (
@@ -98,7 +107,7 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
                   { label: "Pemasukan", style: "solid" },
                   { label: "Pengeluaran", style: "hatch" },
                 ]}
-                summary={`Pemasukan dan pengeluaran per bulan, dividen ${fmt.rupiah(f.dividend)}`}
+                summary={`Pemasukan dan pengeluaran per bulan, sisa saldo ${fmt.rupiah(f.dividend)}`}
               />
             </CardContent>
           </Card>
@@ -114,7 +123,6 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
                   slices={[
                     { label: "Iuran bulanan", value: f.income.monthly, color: "var(--color-chart-1)" },
                     { label: "Registrasi", value: f.income.registration, color: "var(--color-chart-3)" },
-                    { label: "Jersey", value: f.income.jersey, color: "var(--color-chart-4)" },
                   ]}
                 />
               ) : (
@@ -127,7 +135,7 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
 
       <Card className="mt-4">
         <CardContent className="space-y-4">
-          <BlockTitle title="Dividen per bulan" hint="Pemasukan − pengeluaran. Bulan tanpa catatan tidak ditampilkan." />
+          <BlockTitle title="Sisa saldo per bulan" hint="Pemasukan − pengeluaran (dividen per bulan). Bulan tanpa catatan tidak ditampilkan." />
           {f.months.length === 0 ? (
             <p className="py-6 text-center text-xs text-ink-muted">Belum ada pemasukan atau pengeluaran tercatat.</p>
           ) : (
@@ -137,7 +145,7 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
                   <TH>Bulan</TH>
                   <TH className="text-right">Pemasukan</TH>
                   <TH className="text-right">Pengeluaran</TH>
-                  <TH className="text-right">Dividen</TH>
+                  <TH className="text-right">Sisa saldo</TH>
                 </TR>
               </THead>
               <TBody>

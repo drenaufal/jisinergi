@@ -11,10 +11,10 @@ Tampilan hitam-putih, sudut siku, bahasa Indonesia.
 
 | Jenis | Menu |
 |---|---|
-| **Liga** | Aset · Dividen · Modal · Match Fee · Registrasi · RAB |
-| **Sekolah Bola** | Pemasukan (siswa + pembayaran) · Pengeluaran |
+| **Liga** | Aset · Dividen · Modal · Match Fee (+ pemasukan lain) · Registrasi · RAB · RAB Actual |
+| **Sekolah Bola** | Pemasukan (siswa + pembayaran) · Pengeluaran · Aset · Modal · Dividen |
 
-Setiap unit juga punya halaman **Ringkasan** dengan angka dan grafik.
+Setiap unit punya **pemilik** (boleh lebih dari dua) dengan persentase dividen masing-masing; Owner mengubah persentasenya di menu Dividen. Baris **RAB** yang sudah disimpan tidak bisa diubah, dan baris/pengeluaran bertanda **Aset** otomatis masuk ke menu Aset. Setiap unit juga punya halaman **Ringkasan** dengan angka dan grafik.
 
 ## Peran
 
@@ -26,7 +26,8 @@ Setiap unit juga punya halaman **Ringkasan** dengan angka dan grafik.
 ## Rumus
 
 - **Dividen Liga** = RAB − (uang modal + uang masuk registrasi + uang masuk match fee)
-- **Dividen Sekolah Bola (per bulan)** = pemasukan − pengeluaran, dihitung per bulan lalu dijumlahkan
+- **Dividen Sekolah Bola (per bulan)** = pemasukan − pengeluaran (**sisa saldo**), dihitung per bulan lalu dijumlahkan
+- **Bagian tiap pemilik** = dividen unit × persentase pemilik itu
 - **Akumulasi Owner** = dividen semua unit Liga + dividen semua unit Sekolah Bola, dibandingkan dengan target `DIVIDEND_TARGET` (Rp 3.000.000.000, di `lib/finance/config.ts`)
 
 Detail dan keputusan baca data: [docs/finance.md](docs/finance.md).
@@ -41,6 +42,7 @@ npm run db:setup-local          # buat database lokal, migrasi, dan akun Owner (
 npm run db:migrate
 OWNER_EMAIL=anda@contoh.com OWNER_PASSWORD='min-8-karakter' npm run db:seed:owner
 npm run db:seed:demo            # opsional: dua unit contoh (Liga dan Sekolah Bola)
+npm run db:import:excel         # opsional: unit Liga dari dua file Excel contoh (dengan foto bukti), lihat docs/finance.md
 npm run dev                     # http://localhost:3000
 ```
 
@@ -59,9 +61,10 @@ Butuh hosting Node.js (20+) dan database MariaDB/MySQL.
 
 ```bash
 npm run typecheck && npm run test:finance && npm run test:access && npm run lint
+npm run test:records            # aturan di lapisan database; membuat dan menghapus unit sementara
 ```
 
-`test:finance` dan `test:access` tidak butuh database.
+`test:finance` dan `test:access` tidak butuh database; `test:records` butuh database yang sudah dimigrasi.
 
 ## Struktur
 

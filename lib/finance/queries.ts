@@ -1,16 +1,19 @@
-import { asc, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   businessUnitMembers,
+  finActualCosts,
+  finActualItems,
   finAssets,
   finBudgetItems,
   finCapital,
-  finDividends,
   finExpenses,
   finMatchFees,
+  finOtherIncome,
   finRegistrations,
   finStudentPayments,
   finStudents,
+  finUnitOwners,
 } from "@/lib/db/schema";
 import { schoolFigures, unitFigures, type PaymentKind, type UnitDataset } from "./calc";
 import type { UnitType } from "./unit-types";
@@ -24,18 +27,22 @@ export const listAssets = (unitId: string) =>
 export const listCapital = (unitId: string) =>
   db.select().from(finCapital).where(eq(finCapital.businessUnitId, unitId)).orderBy(asc(finCapital.createdAt));
 
-export const listDividends = (unitId: string) =>
-  db.select().from(finDividends).where(eq(finDividends.businessUnitId, unitId)).orderBy(asc(finDividends.createdAt));
+/** The owners of a unit and their dividend shares, in the order they were entered. */
+export const listOwners = (unitId: string) =>
+  db.select().from(finUnitOwners).where(eq(finUnitOwners.businessUnitId, unitId)).orderBy(asc(finUnitOwners.position), asc(finUnitOwners.createdAt));
 
 export const listRegistrations = (unitId: string) =>
-  db.select().from(finRegistrations).where(eq(finRegistrations.businessUnitId, unitId)).orderBy(asc(finRegistrations.clubName));
+  db.select().from(finRegistrations).where(eq(finRegistrations.businessUnitId, unitId)).orderBy(asc(finRegistrations.ageGroup), asc(finRegistrations.clubName));
 
 export const listMatchFees = (unitId: string) =>
   db
     .select()
     .from(finMatchFees)
     .where(eq(finMatchFees.businessUnitId, unitId))
-    .orderBy(asc(finMatchFees.week), asc(finMatchFees.createdAt));
+    .orderBy(asc(finMatchFees.ageGroup), asc(finMatchFees.week), asc(finMatchFees.createdAt));
+
+export const listOtherIncome = (unitId: string) =>
+  db.select().from(finOtherIncome).where(eq(finOtherIncome.businessUnitId, unitId)).orderBy(asc(finOtherIncome.week), asc(finOtherIncome.createdAt));
 
 export const listBudgetItems = (unitId: string) =>
   db
@@ -43,6 +50,14 @@ export const listBudgetItems = (unitId: string) =>
     .from(finBudgetItems)
     .where(eq(finBudgetItems.businessUnitId, unitId))
     .orderBy(asc(finBudgetItems.period), asc(finBudgetItems.categoryOrder), asc(finBudgetItems.itemOrder), asc(finBudgetItems.createdAt));
+
+/** Cost lines added on the RAB Actual page (they are not in the RAB), oldest first. */
+export const listActualItems = (unitId: string) =>
+  db.select().from(finActualItems).where(eq(finActualItems.businessUnitId, unitId)).orderBy(asc(finActualItems.createdAt));
+
+/** Every real cost of a unit, oldest first. */
+export const listActualCosts = (unitId: string) =>
+  db.select().from(finActualCosts).where(eq(finActualCosts.businessUnitId, unitId)).orderBy(asc(finActualCosts.spentOn), asc(finActualCosts.createdAt));
 
 /** Existing budget categories of a unit (to suggest names in the form). */
 export const budgetCategories = (unitId: string) =>
@@ -55,14 +70,19 @@ export const budgetCategories = (unitId: string) =>
 export const listStudents = (unitId: string) =>
   db.select().from(finStudents).where(eq(finStudents.businessUnitId, unitId)).orderBy(asc(finStudents.name));
 
-/** Payments with the student's name and jersey number, newest first. */
+/**
+ * Payments with the student's name and jersey number, newest first. Old `jersey` rows are left out:
+ * jersey money is not income and is no longer recorded.
+ */
 export const listStudentPayments = (unitId: string) =>
   db
     .select({ ...getTableColumns(finStudentPayments), studentName: finStudents.name, studentJersey: finStudents.jerseyNumber })
     .from(finStudentPayments)
     .innerJoin(finStudents, eq(finStudents.id, finStudentPayments.studentId))
-    .where(eq(finStudentPayments.businessUnitId, unitId))
-    .orderBy(desc(finStudentPayments.paidOn), desc(finStudentPayments.createdAt));
+    .where(and(eq(finStudentPayments.businessUnitId, unitId), ne(finStudentPayments.kind, "jersey")))
+    .orderBy(desc(finStudentPayments.paidOn), desc(finStudentPayments.createdAt))
+    // the legacy kind was filtered out above, so what is left is one of the two kinds the app knows
+    .then((rows) => rows.map((r) => ({ ...r, kind: r.kind as PaymentKind })));
 
 export const listExpenses = (unitId: string) =>
   db.select().from(finExpenses).where(eq(finExpenses.businessUnitId, unitId)).orderBy(desc(finExpenses.spentOn), desc(finExpenses.createdAt));
@@ -88,20 +108,26 @@ export async function loginCountsByUnit() {
 /* ── Datasets for the summary pages ─────────────────────────────────── */
 
 export async function ligaDataset(unitId: string, programWeeks: number): Promise<UnitDataset> {
-  const [assets, capital, dividends, registrations, matchFees, budget] = await Promise.all([
+  const [assets, capital, registrations, matchFees, otherIncome, budget] = await Promise.all([
     listAssets(unitId),
     listCapital(unitId),
-    listDividends(unitId),
     listRegistrations(unitId),
     listMatchFees(unitId),
+    listOtherIncome(unitId),
     listBudgetItems(unitId),
   ]);
-  return { programWeeks, assets, capital, dividends, registrations, matchFees, budget };
+  return { programWeeks, assets, capital, registrations, matchFees, otherIncome, budget };
 }
 
 export async function schoolDataset(unitId: string) {
-  const [students, payments, expenses] = await Promise.all([listStudents(unitId), listStudentPayments(unitId), listExpenses(unitId)]);
-  return { students, payments, expenses };
+  const [students, payments, expenses, assets, capital] = await Promise.all([
+    listStudents(unitId),
+    listStudentPayments(unitId),
+    listExpenses(unitId),
+    listAssets(unitId),
+    listCapital(unitId),
+  ]);
+  return { students, payments, expenses, assets, capital };
 }
 
 type UnitRef = { id: string; type: UnitType; programWeeks: number };
@@ -116,15 +142,18 @@ export async function getAllUnitFigures(units: readonly UnitRef[]) {
   const ligaIds = units.filter((u) => u.type === "liga").map((u) => u.id);
   const schoolIds = units.filter((u) => u.type === "sekolah_bola").map((u) => u.id);
 
-  const [assets, capital, dividends, registrations, matchFees, budget, students, payments, expenses] = await Promise.all([
-    ligaIds.length ? db.select().from(finAssets).where(inArray(finAssets.businessUnitId, ligaIds)) : empty<typeof finAssets.$inferSelect>(),
-    ligaIds.length ? db.select().from(finCapital).where(inArray(finCapital.businessUnitId, ligaIds)) : empty<typeof finCapital.$inferSelect>(),
-    ligaIds.length ? db.select().from(finDividends).where(inArray(finDividends.businessUnitId, ligaIds)) : empty<typeof finDividends.$inferSelect>(),
+  const allIds = units.map((u) => u.id);
+  const [assets, capital, registrations, matchFees, otherIncome, budget, students, payments, expenses] = await Promise.all([
+    allIds.length ? db.select().from(finAssets).where(inArray(finAssets.businessUnitId, allIds)) : empty<typeof finAssets.$inferSelect>(),
+    allIds.length ? db.select().from(finCapital).where(inArray(finCapital.businessUnitId, allIds)) : empty<typeof finCapital.$inferSelect>(),
     ligaIds.length ? db.select().from(finRegistrations).where(inArray(finRegistrations.businessUnitId, ligaIds)) : empty<typeof finRegistrations.$inferSelect>(),
     ligaIds.length ? db.select().from(finMatchFees).where(inArray(finMatchFees.businessUnitId, ligaIds)) : empty<typeof finMatchFees.$inferSelect>(),
+    ligaIds.length ? db.select().from(finOtherIncome).where(inArray(finOtherIncome.businessUnitId, ligaIds)) : empty<typeof finOtherIncome.$inferSelect>(),
     ligaIds.length ? db.select().from(finBudgetItems).where(inArray(finBudgetItems.businessUnitId, ligaIds)) : empty<typeof finBudgetItems.$inferSelect>(),
     schoolIds.length ? db.select().from(finStudents).where(inArray(finStudents.businessUnitId, schoolIds)) : empty<typeof finStudents.$inferSelect>(),
-    schoolIds.length ? db.select().from(finStudentPayments).where(inArray(finStudentPayments.businessUnitId, schoolIds)) : empty<typeof finStudentPayments.$inferSelect>(),
+    schoolIds.length
+      ? db.select().from(finStudentPayments).where(and(inArray(finStudentPayments.businessUnitId, schoolIds), ne(finStudentPayments.kind, "jersey")))
+      : empty<typeof finStudentPayments.$inferSelect>(),
     schoolIds.length ? db.select().from(finExpenses).where(inArray(finExpenses.businessUnitId, schoolIds)) : empty<typeof finExpenses.$inferSelect>(),
   ]);
 
@@ -140,9 +169,9 @@ export async function getAllUnitFigures(units: readonly UnitRef[]) {
         programWeeks: u.programWeeks,
         assets: mine(assets, u.id),
         capital: mine(capital, u.id),
-        dividends: mine(dividends, u.id),
         registrations: mine(registrations, u.id),
         matchFees: mine(matchFees, u.id),
+        otherIncome: mine(otherIncome, u.id),
         budget: mine(budget, u.id),
       });
       out.set(u.id, { type: "liga", figures, dividend: figures.dividend.value });
@@ -151,6 +180,8 @@ export async function getAllUnitFigures(units: readonly UnitRef[]) {
         students: mine(students, u.id).length,
         payments: mine(payments, u.id).map((p) => ({ ...p, kind: p.kind as PaymentKind })),
         expenses: mine(expenses, u.id),
+        assets: mine(assets, u.id),
+        capital: mine(capital, u.id),
       });
       out.set(u.id, { type: "sekolah_bola", figures, dividend: figures.dividend });
     }

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowDownToLine, CalendarCheck, Percent, Shirt, UserPlus, Users, Wallet } from "lucide-react";
+import { ArrowDownToLine, CalendarCheck, Percent, Scale, UserPlus, Users, Wallet } from "lucide-react";
 import { loadUnitPage } from "@/lib/finance/access";
-import { listStudentPayments, listStudents } from "@/lib/finance/queries";
-import { incomeByKind, incomeMonthsByKind, sum, type PaymentKind } from "@/lib/finance/calc";
+import { listExpenses, listStudentPayments, listStudents } from "@/lib/finance/queries";
+import { coveredMonth, incomeByKind, incomeMonthsByKind, schoolMonthly, studentStatus, sum, type PaymentKind } from "@/lib/finance/calc";
 import { PAYMENT_KIND_LABEL } from "@/lib/finance/entities";
 import { currentMonth } from "@/lib/finance/period";
 import { menuHref } from "@/lib/finance/unit-types";
@@ -23,7 +23,7 @@ import { AddRecordButton, DeleteRecordButton, EditRecordButton, type FinanceReco
 export const metadata: Metadata = { title: "Pemasukan" };
 export const dynamic = "force-dynamic";
 
-const KINDS: PaymentKind[] = ["registration", "jersey", "monthly"];
+const KINDS: PaymentKind[] = ["registration", "monthly"];
 const isKind = (v: unknown): v is PaymentKind => typeof v === "string" && (KINDS as string[]).includes(v);
 
 export default async function IncomePage({
@@ -38,14 +38,18 @@ export default async function IncomePage({
   const { unit, form, canInput, canDelete } = await loadUnitPage(code, "sekolah_bola");
   const { fmt } = await getI18n();
 
-  const [students, payments] = await Promise.all([listStudents(unit.id), listStudentPayments(unit.id)]);
+  const [students, payments, expenses] = await Promise.all([listStudents(unit.id), listStudentPayments(unit.id), listExpenses(unit.id)]);
   const tab = sp.tab === "pembayaran" ? "pembayaran" : "siswa";
   const kindFilter = isKind(sp.jenis) ? sp.jenis : null;
   const month = currentMonth();
   const monthLabel = (m: string) => fmt.date(`${m}-01`, { month: "short", year: "2-digit" });
 
   const income = incomeByKind(payments);
-  const paidThisMonth = new Set(payments.filter((p) => p.kind === "monthly" && p.period === month).map((p) => p.studentId)).size;
+  // a registration already includes the fee of the month it was paid in, so it counts as "this month paid" too
+  const paidThisMonth = students.filter((s) => studentStatus(payments, s.id, month).paidThisMonth).length;
+  const monthRows = schoolMonthly(payments, expenses);
+  const balanceNow = monthRows.find((m) => m.month === month)?.dividend ?? 0;
+  const balanceAll = sum(monthRows, (m) => m.dividend);
   const formCtx = { ...form, students: students.map((s) => ({ id: s.id, name: s.name, jerseyNumber: s.jerseyNumber })) };
   const here = menuHref(unit.code, "pemasukan");
   const actions = canInput || canDelete;
@@ -95,7 +99,7 @@ export default async function IncomePage({
       <PageHeader
         eyebrow={unit.name}
         title="Pemasukan"
-        description="Daftar siswa beserta pembayaran registrasi, jersey, dan iuran bulanannya."
+        description="Daftar siswa beserta pembayaran registrasi dan iuran bulanannya."
         actions={
           canInput && (
             <>
@@ -111,9 +115,9 @@ export default async function IncomePage({
         title="Cara membaca halaman Pemasukan"
         intro="Satu baris di tab Siswa adalah satu anak — sama seperti satu baris pada formulir Excel “Sekolah Bola”. Setiap pembayaran dicatat di tab Pembayaran dan otomatis muncul pada baris anak yang bersangkutan."
         terms={[
-          { term: "Registrasi", text: "Uang pendaftaran, dibayar sekali per siswa, dengan diskon jika ada." },
-          { term: "Jersey", text: "Uang pembelian jersey. Boleh lebih dari satu kali." },
+          { term: "Registrasi", text: "Uang pendaftaran, dibayar sekali per siswa, dengan diskon jika ada. Sudah termasuk iuran bulan saat registrasi dibayar." },
           { term: "Iuran bulanan", text: "Satu pembayaran untuk setiap bulan; kolom “Bulan ini” menunjukkan siapa yang belum membayar." },
+          { term: "Sisa saldo", text: "Pemasukan bulan ini dikurangi pengeluaran bulan ini (dividen per bulan). Uang jersey tidak dicatat sebagai pemasukan." },
           { term: "Diskon", text: "Potongan yang diberikan. Hanya informasi, bukan bagian dari uang yang diterima." },
           { term: "Bukti", text: "Foto atau scan bukti pembayaran. Klik “Lihat bukti” untuk membukanya." },
         ]}
@@ -124,9 +128,9 @@ export default async function IncomePage({
         <Kpi label="Total pemasukan" value={fmt.rupiahCompact(income.total)} full={fmt.rupiah(income.total)} icon={<ArrowDownToLine className="size-4" />} block="red" hint={`${fmt.number(payments.length)} pembayaran`} />
         <Kpi label="Siswa" value={fmt.number(students.length)} icon={<Users className="size-4" />} block="blue" hint="Terdaftar di unit ini" />
         <Kpi label="Registrasi" value={fmt.rupiahCompact(income.registration)} full={fmt.rupiah(income.registration)} icon={<Wallet className="size-4" />} block="white" hint={`${fmt.number(new Set(payments.filter((p) => p.kind === "registration").map((p) => p.studentId)).size)} siswa`} />
-        <Kpi label="Jersey" value={fmt.rupiahCompact(income.jersey)} full={fmt.rupiah(income.jersey)} icon={<Shirt className="size-4" />} block="white" hint={`${fmt.number(payments.filter((p) => p.kind === "jersey").length)} pembelian`} />
         <Kpi label="Iuran bulanan" value={fmt.rupiahCompact(income.monthly)} full={fmt.rupiah(income.monthly)} icon={<CalendarCheck className="size-4" />} block="white" hint={`${fmt.number(paidThisMonth)}/${fmt.number(students.length)} siswa bayar ${monthLabel(month)}`} />
         <Kpi label="Diskon diberikan" value={fmt.rupiahCompact(income.discounts)} full={fmt.rupiah(income.discounts)} icon={<Percent className="size-4" />} block="yellow" hint="Registrasi + bulanan" />
+        <Kpi label="Sisa saldo" value={fmt.rupiahCompact(balanceNow)} full={fmt.rupiah(balanceNow)} icon={<Scale className="size-4" />} block="night" hint={`Dividen ${monthLabel(month)} · akumulasi ${fmt.rupiahCompact(balanceAll)}`} />
       </div>
 
       {months.length > 0 && (
@@ -136,11 +140,10 @@ export default async function IncomePage({
           </CardHeader>
           <CardContent>
             <GroupedColumns
-              data={months.map((m) => ({ label: monthLabel(m.month), values: [m.monthly, m.registration, m.jersey] }))}
+              data={months.map((m) => ({ label: monthLabel(m.month), values: [m.monthly, m.registration] }))}
               series={[
                 { label: "Iuran bulanan", style: "solid" },
                 { label: "Registrasi", style: "hatch" },
-                { label: "Jersey", style: "light" },
               ]}
               summary={`Pemasukan per bulan, total ${fmt.rupiah(income.total)}`}
             />
@@ -184,10 +187,10 @@ export default async function IncomePage({
                     <TR className="hover:bg-transparent">
                       <TH className="w-10">No</TH>
                       <TH><ColumnHead label="Nama anak" hint="Nama panggilan" /></TH>
-                      <TH><ColumnHead label="Bergabung" hint="Tanggal lahir" /></TH>
+                      <TH><ColumnHead label="Tanggal lahir" hint="Anak" /></TH>
+                      <TH><ColumnHead label="Bergabung" hint="Tanggal masuk" /></TH>
                       <TH className="text-center"><ColumnHead label="No punggung" align="center" /></TH>
                       <TH><ColumnHead label="Registrasi" hint="Uang · diskon" /></TH>
-                      <TH className="text-right"><ColumnHead label="Jersey" hint="Total dibeli" align="right" /></TH>
                       <TH><ColumnHead label={`Bulan ini`} hint={monthLabel(month)} /></TH>
                       <TH className="text-right"><ColumnHead label="Total dibayar" hint="Semua jenis" align="right" /></TH>
                       <TH className="w-44"><span className="sr-only">Aksi</span></TH>
@@ -197,8 +200,7 @@ export default async function IncomePage({
                     {students.map((s, i) => {
                       const mine = byStudent.get(s.id) ?? [];
                       const reg = mine.find((p) => p.kind === "registration");
-                      const jersey = sum(mine.filter((p) => p.kind === "jersey"), (p) => p.amount);
-                      const monthPay = mine.find((p) => p.kind === "monthly" && p.period === month);
+                      const monthPay = mine.find((p) => coveredMonth(p) === month);
                       return (
                         <TR key={s.id}>
                           <TD className="tabular-nums text-ink-muted">{i + 1}</TD>
@@ -206,10 +208,8 @@ export default async function IncomePage({
                             <span className="font-medium text-ink">{s.name}</span>
                             {s.nickname && <span className="block text-[11px] text-ink-muted">“{s.nickname}”</span>}
                           </TD>
-                          <TD className="whitespace-nowrap tabular-nums">
-                            {fmt.date(s.joinedOn)}
-                            <span className="block text-[11px] text-ink-muted">{s.birthDate ? fmt.date(s.birthDate) : "—"}</span>
-                          </TD>
+                          <TD className="whitespace-nowrap tabular-nums">{s.birthDate ? fmt.date(s.birthDate) : "—"}</TD>
+                          <TD className="whitespace-nowrap tabular-nums">{fmt.date(s.joinedOn)}</TD>
                           <TD className="text-center tabular-nums">{s.jerseyNumber ?? "—"}</TD>
                           <TD>
                             {reg ? (
@@ -222,8 +222,10 @@ export default async function IncomePage({
                               <Badge tone="danger">Belum</Badge>
                             )}
                           </TD>
-                          <TD className="text-right tabular-nums">{jersey > 0 ? fmt.rupiah(jersey) : "—"}</TD>
-                          <TD>{monthPay ? <Badge tone="success">Lunas</Badge> : <Badge tone="danger">Belum</Badge>}</TD>
+                          <TD>
+                            {monthPay ? <Badge tone="success">Lunas</Badge> : <Badge tone="danger">Belum</Badge>}
+                            {monthPay?.kind === "registration" && <span className="mt-0.5 block text-[10px] text-ink-muted">Dari registrasi</span>}
+                          </TD>
                           <TD className="text-right font-medium tabular-nums text-ink">{fmt.rupiah(sum(mine, (p) => p.amount))}</TD>
                           <TD>
                             <div className="flex items-center justify-end gap-1">
@@ -284,7 +286,7 @@ export default async function IncomePage({
                           {p.note && <span className="block text-[11px] text-ink-muted">{p.note}</span>}
                         </TD>
                         <TD><Badge tone={p.kind === "monthly" ? "neutral" : "info"}>{PAYMENT_KIND_LABEL[p.kind]}</Badge></TD>
-                        <TD className="whitespace-nowrap">{p.period ? monthLabel(p.period) : "—"}</TD>
+                        <TD className="whitespace-nowrap">{coveredMonth(p) ? monthLabel(coveredMonth(p)!) : "—"}</TD>
                         <TD className="text-right font-medium tabular-nums text-ink">{fmt.rupiah(p.amount)}</TD>
                         <TD className="text-right tabular-nums text-ink-muted">{p.discount > 0 ? fmt.rupiah(p.discount) : "—"}</TD>
                         <TD><ProofChip url={p.proofUrl} viewLabel="Lihat bukti" missingLabel="Belum ada bukti" /></TD>

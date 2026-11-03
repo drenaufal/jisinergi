@@ -1,7 +1,7 @@
 import { and, eq, or } from "drizzle-orm";
 import type { AnyMySqlColumn } from "drizzle-orm/mysql-core";
 import { db } from "@/lib/db";
-import { finAssets, finExpenses, finMatchFees, finRegistrations, finStudentPayments } from "@/lib/db/schema";
+import { finActualCosts, finAssets, finExpenses, finMatchFees, finOtherIncome, finRegistrations, finStudentPayments } from "@/lib/db/schema";
 import { mediaUrl } from "@/lib/media";
 import type { CurrentUser } from "@/lib/auth/session";
 import { scopeOf } from "./access";
@@ -37,6 +37,8 @@ export async function canOpenFinanceProof(
         .where(and(eq(finStudentPayments.proofUrl, url), mine(finStudentPayments.businessUnitId)))
         .limit(1),
       db.select({ id: finExpenses.id }).from(finExpenses).where(and(eq(finExpenses.proofUrl, url), mine(finExpenses.businessUnitId))).limit(1),
+      db.select({ id: finActualCosts.id }).from(finActualCosts).where(and(eq(finActualCosts.proofUrl, url), mine(finActualCosts.businessUnitId))).limit(1),
+      db.select({ id: finOtherIncome.id }).from(finOtherIncome).where(and(eq(finOtherIncome.proofUrl, url), mine(finOtherIncome.businessUnitId))).limit(1),
     ]);
     return hits.some((rows) => rows.length > 0);
   } catch {

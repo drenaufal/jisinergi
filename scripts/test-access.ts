@@ -42,11 +42,12 @@ ok(!canTouchUnit(orphan, "unit-a") && !canTouchUnit(owner, null) && !canTouchUni
 
 /* ── Unit types and their menus ── */
 eq([...UNIT_TYPES], ["liga", "sekolah_bola"], "two unit types");
-eq(UNIT_MENUS.liga.map((m) => m.slug), ["aset", "dividen", "modal", "match-fee", "registrasi", "rab"], "Liga menus: Aset, Dividen, Modal, Match Fee, Registrasi, RAB");
-eq(UNIT_MENUS.sekolah_bola.map((m) => m.slug), ["pemasukan", "pengeluaran"], "Sekolah Bola menus: Pemasukan, Pengeluaran");
-eq(UNIT_KINDS.liga, ["asset", "capital", "dividend", "registration", "matchfee", "budget"], "Liga holds the six original kinds of data");
-eq(UNIT_KINDS.sekolah_bola, ["student", "payment", "expense"], "Sekolah Bola holds students, payments and expenses");
-ok(FINANCE_KINDS.every((k) => UNIT_KINDS.liga.includes(k) !== UNIT_KINDS.sekolah_bola.includes(k)), "every kind of data belongs to exactly one unit type");
+eq(UNIT_MENUS.liga.map((m) => m.slug), ["aset", "dividen", "modal", "match-fee", "registrasi", "rab", "rab-actual"], "Liga menus: Aset, Dividen, Modal, Match Fee, Registrasi, RAB, RAB Actual");
+eq(UNIT_MENUS.sekolah_bola.map((m) => m.slug), ["pemasukan", "pengeluaran", "aset", "modal", "dividen"], "Sekolah Bola menus: Pemasukan, Pengeluaran, Aset, Modal, Dividen");
+eq(UNIT_KINDS.liga, ["asset", "capital", "registration", "matchfee", "otherincome", "budget", "actualitem", "actualcost"], "Liga holds assets, capital, registrations, match fees, other income, the RAB and RAB Actual");
+eq(UNIT_KINDS.sekolah_bola, ["student", "payment", "expense", "asset", "capital"], "Sekolah Bola holds students, payments, expenses, assets and capital");
+ok(FINANCE_KINDS.every((k) => UNIT_KINDS.liga.includes(k) || UNIT_KINDS.sekolah_bola.includes(k)), "every kind of data is available to some unit type");
+eq(FINANCE_KINDS.filter((k) => UNIT_KINDS.liga.includes(k) && UNIT_KINDS.sekolah_bola.includes(k)), ["asset", "capital"], "only assets and capital are shared by both unit types");
 eq(menuHref("LIGA-1", "aset"), "/u/LIGA-1/aset", "menu links are /u/<code>/<menu>");
 
 /* ── Navigation ── */
@@ -58,8 +59,8 @@ const units = [
 const ownerNav = buildNav({ role: "owner" }, units);
 eq(ownerNav.general.map((l) => l.href), ["/ringkasan", "/unit", "/audit"], "owner: overview, unit management, audit trail");
 eq(ownerNav.units.map((u) => u.code), ["LIGA-1", "SB-1", "SB-2"], "owner: every unit");
-eq(ownerNav.units[0].links.length, 7, "a Liga unit: summary + six menus");
-eq(ownerNav.units[1].links.map((l) => l.label), ["Ringkasan unit", "Pemasukan", "Pengeluaran"], "a Sekolah Bola unit: summary + Pemasukan + Pengeluaran");
+eq(ownerNav.units[0].links.length, 8, "a Liga unit: summary + seven menus");
+eq(ownerNav.units[1].links.map((l) => l.label), ["Ringkasan unit", "Pemasukan", "Pengeluaran", "Aset", "Modal", "Dividen"], "a Sekolah Bola unit: summary + five menus");
 ok(ownerNav.units.every((u) => u.links[0].href === `/u/${u.code}`), "the first link of a unit is its summary");
 
 const adminNav = buildNav({ role: "unit_admin" }, [units[1]]);

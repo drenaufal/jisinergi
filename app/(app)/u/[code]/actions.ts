@@ -7,6 +7,9 @@ import { getT } from "@/lib/i18n/server";
 import { ENTITIES, isFinanceKind, type FinanceKind } from "@/lib/finance/entities";
 import { scopeOf } from "@/lib/finance/access";
 import { FinanceRuleError, deleteFinanceRecord, markCapitalReturned, saveFinanceRecord } from "@/lib/finance/records";
+import { bpToField, ownersSchema, readOwnerRows } from "@/lib/finance/ownership";
+import { UnitRuleError, replaceUnitOwners } from "@/lib/finance/units";
+import { auditText, recordAudit } from "@/lib/audit";
 
 /* Every action re-checks who is asking: the page that rendered the button is not trusted. */
 
@@ -69,6 +72,35 @@ export async function markReturned(id: string): Promise<DeleteResult> {
     await markCapitalReturned({ t, actor: user, scope, id });
   } catch (error) {
     if (error instanceof FinanceRuleError) return { error: error.message };
+    throw error;
+  }
+  refresh();
+  return undefined;
+}
+
+/** Owner only: rewrites who owns the unit and each owner's percentage of its dividend. */
+export async function saveOwnersAction(unitId: string, _prev: FormState, formData: FormData): Promise<FormState> {
+  const t = await getT();
+  const actor = await actionUser("units:manage");
+  const parsed = ownersSchema(t).safeParse(readOwnerRows(formData));
+  if (!parsed.success) return formError(t, { owners: parsed.error.issues[0]?.message ?? t("Periksa kembali isian formulir.") }, formData);
+
+  try {
+    const { unit, after } = await replaceUnitOwners(t, unitId, parsed.data);
+    await recordAudit({
+      actorId: actor.id,
+      actorName: actor.name,
+      actorRole: actor.role,
+      action: "finance.unit.owners",
+      entityType: "business_unit",
+      entityId: unitId,
+      summary: auditText("Pembagian dividen {unit} diubah: {shares}", {
+        unit: unit.name,
+        shares: after.map((o) => `${o.name} ${bpToField(o.shareBp)}%`).join(" · "),
+      }),
+    });
+  } catch (error) {
+    if (error instanceof UnitRuleError) return formError(t, error.fieldErrors, formData, error.message);
     throw error;
   }
   refresh();

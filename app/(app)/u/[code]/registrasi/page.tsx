@@ -3,11 +3,13 @@ import { ClipboardCheck, Clock, Receipt, Wallet } from "lucide-react";
 import { loadUnitPage } from "@/lib/finance/access";
 import { listRegistrations } from "@/lib/finance/queries";
 import {
+  compareAgeGroups,
   registrationPaid,
   registrationRemaining,
   registrationStatus,
   share,
   sum,
+  teamLabel,
   type RegistrationStatus,
 } from "@/lib/finance/calc";
 import { PageHeader } from "@/components/app/page-header";
@@ -34,7 +36,9 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
   const { unit, form, canInput, canDelete } = await loadUnitPage(code, "liga");
   const { t, fmt } = await getI18n();
 
-  const rows = await listRegistrations(unit.id);
+  const rows = [...(await listRegistrations(unit.id))].sort((a, b) => compareAgeGroups(a.ageGroup, b.ageGroup) || a.clubName.localeCompare(b.clubName));
+  const ageGroups = [...new Set(rows.map((r) => r.ageGroup).filter(Boolean))].sort(compareAgeGroups);
+  const hasGroups = ageGroups.length > 0;
   const billed = sum(rows, (r) => r.fee);
   const received = sum(rows, registrationPaid);
   const remaining = sum(rows, registrationRemaining);
@@ -48,12 +52,14 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
   const pct = (fraction: number) => `${Math.round(fraction * 100)}%`;
   const proofLabels = { viewLabel: t("Lihat bukti"), missingLabel: t("Belum ada bukti") };
   const clubs = [...new Set(rows.map((r) => r.clubName))];
-  const formCtx = { ...form, clubs };
+  const formCtx = { ...form, clubs, ageGroups };
+  const groupRows = (group: string) => rows.filter((r) => r.ageGroup === group);
 
   const record = (r: (typeof rows)[number]): FinanceRecord => ({
     id: r.id,
     businessUnitId: r.businessUnitId,
     clubName: r.clubName,
+    ageGroup: r.ageGroup,
     fee: r.fee,
     dpAmount: r.dpAmount,
     dpPaidOn: r.dpPaidOn,
@@ -83,7 +89,7 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
       <PageHeader
         eyebrow={unit.name}
         title={t("Uang Masuk Registrasi")}
-        description={t("Biaya pendaftaran yang dibayar setiap klub: berapa yang ditagih, berapa sudah dibayar (DP dan pelunasan), dan berapa sisanya.")}
+        description={t("Biaya pendaftaran yang dibayar setiap klub (per kelompok umur bila ada): berapa yang ditagih, berapa sudah dibayar (DP dan pelunasan), dan berapa sisanya.")}
         actions={canInput && <AddRecordButton kind="registration" ctx={formCtx} />}
       />
 
@@ -92,6 +98,7 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
         title={t("Cara membaca halaman Registrasi")}
         intro={t("Setiap klub membayar biaya registrasi dalam dua tahap: DP lebih dulu, lalu pelunasan. Tabel ini menunjukkan tagihan tiap klub, apa yang sudah masuk, dan berapa yang masih kurang.")}
         terms={[
+          { term: t("Kelompok umur"), text: t("Divisi tempat klub mendaftar (U8, U9, …). Klub yang sama di dua kelompok punya dua baris dan dua tagihan.") },
           { term: t("Biaya registrasi"), text: t("Total yang harus dibayar klub.") },
           { term: t("DP"), text: t("Pembayaran awal. Kolom ini berisi nominal, tanggal, dan bukti pembayarannya.") },
           { term: t("Pelunasan"), text: t("Pembayaran sisanya. Kosong (—) berarti belum dibayar.") },
@@ -162,7 +169,7 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
                   .sort((a, b) => registrationPaid(b) - registrationPaid(a))
                   .slice(0, 10)
                   .map((r) => ({
-                    label: r.clubName,
+                    label: teamLabel(r),
                     value: registrationPaid(r),
                     valueLabel: fmt.rupiah(registrationPaid(r)),
                     sublabel: t("{pct} dari {fee}", { pct: pct(share(registrationPaid(r), r.fee)), fee: fmt.rupiahCompact(r.fee) }),
@@ -174,9 +181,44 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
         </div>
       )}
 
+      {ageGroups.length > 1 && (
+        <Card className="mt-4">
+          <CardContent className="space-y-4">
+            <BlockTitle title={t("Per kelompok umur")} hint={t("Tagihan dan uang masuk setiap kelompok.")} />
+            <Table>
+              <THead>
+                <TR className="hover:bg-transparent">
+                  <TH>{t("Kelompok")}</TH>
+                  <TH className="text-right">{t("Klub")}</TH>
+                  <TH className="text-right">{t("Tagihan")}</TH>
+                  <TH className="text-right">{t("Diterima")}</TH>
+                  <TH className="text-right">{t("Sisa")}</TH>
+                  <TH className="text-right">{t("Lunas")}</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {[...ageGroups, ...(rows.some((r) => !r.ageGroup) ? [""] : [])].map((group) => {
+                  const list = groupRows(group);
+                  return (
+                    <TR key={group || "none"}>
+                      <TD className="font-semibold text-ink">{group || t("Tanpa kelompok")}</TD>
+                      <TD className="text-right tabular-nums">{fmt.number(list.length)}</TD>
+                      <TD className="text-right tabular-nums">{fmt.rupiah(sum(list, (r) => r.fee))}</TD>
+                      <TD className="text-right tabular-nums">{fmt.rupiah(sum(list, registrationPaid))}</TD>
+                      <TD className="text-right tabular-nums">{fmt.rupiah(sum(list, registrationRemaining))}</TD>
+                      <TD className="text-right tabular-nums">{fmt.number(list.filter((r) => registrationStatus(r) === "paid").length)}/{fmt.number(list.length)}</TD>
+                    </TR>
+                  );
+                })}
+              </TBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="mt-4">
         <CardContent className="space-y-4">
-          <BlockTitle title={t("Daftar registrasi klub")} hint={t("Satu baris untuk setiap klub.")} />
+          <BlockTitle title={t("Daftar registrasi klub")} hint={hasGroups ? t("Satu baris untuk setiap klub di setiap kelompok umur.") : t("Satu baris untuk setiap klub.")} />
           {rows.length === 0 ? (
             <EmptyState
               icon={ClipboardCheck}
@@ -189,6 +231,7 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
                 <THead>
                   <TR className="hover:bg-transparent">
                     <TH className="w-10">No</TH>
+                    {hasGroups && <TH><ColumnHead label={t("Kelompok")} hint={t("Umur / divisi")} /></TH>}
                     <TH><ColumnHead label={t("Klub")} hint={t("Nama klub")} /></TH>
                     <TH className="text-right"><ColumnHead label={t("Biaya registrasi")} hint={t("Yang harus dibayar")} align="right" /></TH>
                     <TH><ColumnHead label={t("DP")} hint={t("Nominal · tanggal · bukti")} /></TH>
@@ -205,6 +248,7 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
                     return (
                       <TR key={r.id}>
                         <TD className="tabular-nums text-ink-muted">{i + 1}</TD>
+                        {hasGroups && <TD className="whitespace-nowrap font-semibold text-ink">{r.ageGroup || "—"}</TD>}
                         <TD>
                           <span className="font-medium text-ink">{r.clubName}</span>
                           {r.note && <span className="block text-[11px] text-ink-muted">{r.note}</span>}
@@ -221,7 +265,7 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
                           <TD>
                             <div className="flex justify-end gap-0.5">
                               {canInput && <EditRecordButton kind="registration" record={record(r)} ctx={formCtx} />}
-                              {canDelete && <DeleteRecordButton kind="registration" id={r.id} name={r.clubName} />}
+                              {canDelete && <DeleteRecordButton kind="registration" id={r.id} name={teamLabel(r)} />}
                             </div>
                           </TD>
                         )}
@@ -231,7 +275,7 @@ export default async function RegistrationsPage({ params }: { params: Promise<{ 
                 </TBody>
                 <tfoot>
                   <tr className="border-t-2 border-line bg-surface-2 text-sm font-bold tabular-nums text-ink">
-                    <td colSpan={2} className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-ink-secondary">
+                    <td colSpan={hasGroups ? 3 : 2} className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-ink-secondary">
                       {t("Total")}
                     </td>
                     <td className="px-3 py-3 text-right">{fmt.rupiah(billed)}</td>

@@ -10,13 +10,15 @@
     "typecheck": "tsc --noEmit",
     "test:finance": "tsx scripts/test-finance.ts",
     "test:access": "tsx scripts/test-access.ts",
+    "test:records": "tsx scripts/test-records.ts",
     "db:generate": "drizzle-kit generate",
     "db:setup-local": "tsx scripts/setup-local-db.ts",
     "db:migrate": "tsx lib/db/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed:owner": "tsx scripts/seed-owner.ts",
-    "db:seed:demo": "tsx scripts/seed-demo.ts"
+    "db:seed:demo": "tsx scripts/seed-demo.ts",
+    "db:import:excel": "tsx scripts/import-excel.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

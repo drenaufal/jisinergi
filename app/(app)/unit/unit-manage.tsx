@@ -7,12 +7,13 @@ import { createLoginAction, createUnitAction, updateLoginAction, updateUnitActio
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
+import { OwnersEditor } from "@/components/finance/owners-editor";
 import { UNIT_TYPE_HINT, UNIT_TYPE_LABEL, UNIT_TYPES, type UnitType } from "@/lib/finance/unit-types";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toaster";
 import { useT } from "@/lib/i18n/client";
 
-export type UnitData = { id: string; code: string; name: string; type: UnitType; description: string | null; programWeeks: number; active: boolean };
+export type UnitData = { id: string; code: string; name: string; type: UnitType; description: string | null; programWeeks: number; programStartsOn: string | null; active: boolean };
 export type LoginData = { userId: string; name: string; email: string; active: boolean };
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -129,10 +130,24 @@ function UnitCreateForm({ onDone }: { onDone: () => void }) {
               <Input name="programWeeks" type="number" min={1} max={52} required defaultValue={val("programWeeks", "10")} />
             </Field>
           )}
-          <Field label={t("Keterangan")} error={fe.description} hint={t("Opsional")}>
+          {type === "liga" && (
+            <Field label={t("Tanggal mulai program")} error={fe.programStartsOn} hint={t("Hari pertama minggu ke-1, untuk membagi biaya RAB Actual per minggu. Opsional.")}>
+              <Input name="programStartsOn" type="date" defaultValue={val("programStartsOn")} />
+            </Field>
+          )}
+          <Field label={t("Keterangan")} error={fe.description} hint={t("Opsional")} className={type === "liga" ? "sm:col-span-2" : ""}>
             <Textarea name="description" rows={2} maxLength={300} defaultValue={val("description")} />
           </Field>
         </Section>
+        <fieldset>
+          <legend className="border-b border-line pb-1 text-[11px] font-semibold uppercase tracking-wider text-ink">{t("Kepemilikan")}</legend>
+          <p className="mb-3 mt-1 text-[11px] text-ink-muted">
+            {type === "sekolah_bola"
+              ? t("Siapa saja pemilik unit ini dan berapa persen dividen masing-masing. Isi juga modal yang disetor. Namanya muncul di menu Dividen.")
+              : t("Siapa saja pemilik unit ini (boleh lebih dari dua) dan berapa persen dividen masing-masing. Namanya muncul di menu Dividen.")}
+          </p>
+          <OwnersEditor withCapital={type === "sekolah_bola"} error={fe.owners} />
+        </fieldset>
         <Section title={t("Akun login pertama")} hint={t("Opsional. Akun ini hanya bisa melihat dan mengisi data unit ini. Login tambahan bisa dibuat nanti.")}>
           <LoginFields fe={fe} val={val} prefix="login" />
         </Section>
@@ -172,6 +187,11 @@ function UnitEditForm({ unit, onDone }: { unit: UnitData; onDone: () => void }) 
           {unit.type === "liga" && (
             <Field label={t("Minggu program")} error={fe.programWeeks}>
               <Input name="programWeeks" type="number" min={1} max={52} required defaultValue={val("programWeeks", String(unit.programWeeks))} />
+            </Field>
+          )}
+          {unit.type === "liga" && (
+            <Field label={t("Tanggal mulai program")} error={fe.programStartsOn} hint={t("Hari pertama minggu ke-1. Kosongkan untuk mengikuti biaya actual pertama.")}>
+              <Input name="programStartsOn" type="date" defaultValue={val("programStartsOn", unit.programStartsOn ?? "")} />
             </Field>
           )}
           <Field label={t("Keterangan")} error={fe.description} className="sm:col-span-2">
