@@ -158,7 +158,9 @@ export type UnitFigures = {
   income: number;
   /** Income as a share of the budget (can exceed 1). */
   budgetCoverage: number;
-  /** Dividen (Liga) = RAB − (modal + registrasi + match fee). */
+  /** RAB Actual: the money really spent so far, on RAB lines and on lines outside the RAB. */
+  actual: { total: number; count: number };
+  /** Dividen (Liga) = (modal + registrasi + match fee) − RAB Actual. */
   dividend: LigaDividend;
 };
 
@@ -170,13 +172,13 @@ export type UnitDataset = {
   matchFees: (MatchFeeAmounts & { week: number })[];
   otherIncome?: { amount: number }[];
   budget: BudgetLine[];
+  /** Every real cost of the RAB Actual page. */
+  actualCosts?: { amount: number }[];
 };
 
 /* ── Dividen Liga ───────────────────────────────────────────────────── */
 
 export type LigaDividend = {
-  /** Total RAB (estimasi OPEX). */
-  budget: number;
   /** Uang modal (all capital put in). */
   capital: number;
   /** Uang masuk registrasi (DP + pelunasan received). */
@@ -185,14 +187,16 @@ export type LigaDividend = {
   matchFee: number;
   /** capital + registration + matchFee. */
   funding: number;
-  /** RAB − (modal + registrasi + match fee). */
+  /** RAB Actual: all money really spent. */
+  actual: number;
+  /** (modal + registrasi + match fee) − RAB Actual. */
   value: number;
 };
 
-/** Dividen (Liga) = RAB − (uang modal + registrasi + match fee). */
-export function ligaDividend(input: { budget: number; capital: number; registration: number; matchFee: number }): LigaDividend {
+/** Dividen (Liga) = (uang modal + registrasi + match fee) − RAB Actual. */
+export function ligaDividend(input: { capital: number; registration: number; matchFee: number; actual: number }): LigaDividend {
   const funding = input.capital + input.registration + input.matchFee;
-  return { ...input, funding, value: input.budget - funding };
+  return { ...input, funding, value: funding - input.actual };
 }
 
 export function unitFigures(data: UnitDataset): UnitFigures {
@@ -202,6 +206,8 @@ export function unitFigures(data: UnitDataset): UnitFigures {
   const matchFeeTotal = sum(data.matchFees, matchFeeAmount);
   const budget = budgetTotals(data.budget, data.programWeeks);
   const income = received + matchFeeTotal;
+  const actualCosts = data.actualCosts ?? [];
+  const actual = { total: sum(actualCosts, (c) => c.amount), count: actualCosts.length };
   return {
     capital: { ...capital, count: data.capital.length },
     assets: {
@@ -225,7 +231,8 @@ export function unitFigures(data: UnitDataset): UnitFigures {
     budget: { ...budget, lines: data.budget.length },
     income,
     budgetCoverage: share(income, budget.total),
-    dividend: ligaDividend({ budget: budget.total, capital: capital.total, registration: received, matchFee: matchFeeTotal }),
+    actual,
+    dividend: ligaDividend({ capital: capital.total, registration: received, matchFee: matchFeeTotal, actual: actual.total }),
   };
 }
 
@@ -314,6 +321,53 @@ export function schoolFigures(input: {
     assets: { total: sum(assets, (a) => a.amount), count: assets.length },
     capital: { ...capitalSummary(capital), count: capital.length },
   };
+}
+
+/* ── Laporan keuangan (Sekolah Bola) ────────────────────────────────── */
+
+export type LedgerRow = {
+  /** 1-based position in date order. */
+  no: number;
+  date: string;
+  direction: "in" | "out";
+  /** The "Note" column: the student's name for money in, what was paid for for money out. */
+  note: string;
+  /** Money in: what the payment was for. Money out: the expense category. */
+  kind: PaymentKind | null;
+  period: string | null;
+  category: string | null;
+  /** Salary rows only. */
+  attendanceDays: number | null;
+  dailyRate: number | null;
+  cashIn: number;
+  cashOut: number;
+};
+
+/**
+ * The financial report as the "LAPORAN KEUANGAN" sheet lays it out: one list of everything that came in
+ * and went out, oldest first (rows of one day keep the order they were entered in), with the totals above it.
+ * Sisa saldo here = saldo awal + total masuk − total keluar, so unlike the dividend it starts from the opening balance.
+ */
+export function financialReport(input: {
+  openingBalance: number;
+  payments: readonly (Pick<PaymentAmounts, "kind" | "paidOn" | "amount" | "period"> & { studentName: string; createdAt: Date })[];
+  expenses: readonly (ExpenseAmounts & { name: string; attendanceDays: number | null; dailyRate: number | null; createdAt: Date })[];
+}) {
+  const entries = [
+    ...input.payments.map((p) => ({
+      at: p.createdAt.getTime(),
+      row: { date: p.paidOn, direction: "in" as const, note: p.studentName, kind: p.kind, period: coveredMonth(p), category: null, attendanceDays: null, dailyRate: null, cashIn: p.amount, cashOut: 0 },
+    })),
+    ...input.expenses.map((e) => ({
+      at: e.createdAt.getTime(),
+      row: { date: e.spentOn, direction: "out" as const, note: e.name, kind: null, period: null, category: e.category, attendanceDays: e.attendanceDays, dailyRate: e.dailyRate, cashIn: 0, cashOut: e.amount },
+    })),
+  ].sort((a, b) => a.row.date.localeCompare(b.row.date) || a.at - b.at);
+
+  const rows: LedgerRow[] = entries.map((e, i) => ({ no: i + 1, ...e.row }));
+  const totalIn = sum(rows, (r) => r.cashIn);
+  const totalOut = sum(rows, (r) => r.cashOut);
+  return { openingBalance: input.openingBalance, totalIn, totalOut, balance: input.openingBalance + totalIn - totalOut, rows };
 }
 
 /** Income per month, split by kind (for the stacked chart). */

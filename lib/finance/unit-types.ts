@@ -12,8 +12,8 @@ export const UNIT_TYPE_LABEL: Record<UnitType, string> = {
 };
 
 export const UNIT_TYPE_HINT: Record<UnitType, string> = {
-  liga: "Aset, dividen, modal, uang masuk match fee, uang masuk registrasi, RAB, dan RAB Actual.",
-  sekolah_bola: "Pemasukan dari siswa (registrasi dan iuran bulanan), pengeluaran, aset, modal, dan dividen.",
+  liga: "Aset, dividen, modal, uang masuk match fee, uang masuk registrasi, RAB Budget, dan RAB Actual.",
+  sekolah_bola: "Pemasukan dari siswa (registrasi dan iuran bulanan), pengeluaran, laporan keuangan, aset, modal, dan dividen.",
 };
 
 /** What a menu entry is: the URL segment under /u/<code>, its label, and a one-line description. */
@@ -26,12 +26,13 @@ export const UNIT_MENUS: Record<UnitType, readonly UnitMenu[]> = {
     { slug: "modal", label: "Modal", hint: "Uang yang disetor pemodal" },
     { slug: "match-fee", label: "Match Fee", hint: "Match fee per klub per minggu dan pemasukan lain" },
     { slug: "registrasi", label: "Registrasi", hint: "Uang masuk registrasi klub" },
-    { slug: "rab", label: "RAB", hint: "Rencana anggaran biaya" },
+    { slug: "rab", label: "RAB Budget", hint: "Rencana anggaran biaya" },
     { slug: "rab-actual", label: "RAB Actual", hint: "Biaya yang benar-benar keluar per minggu" },
   ],
   sekolah_bola: [
     { slug: "pemasukan", label: "Pemasukan", hint: "Siswa, registrasi, iuran bulanan" },
     { slug: "pengeluaran", label: "Pengeluaran", hint: "Laporan pengeluaran sekolah" },
+    { slug: "laporan-keuangan", label: "Laporan Keuangan", hint: "Uang masuk dan keluar, saldo awal sampai sisa saldo" },
     { slug: "aset", label: "Aset", hint: "Peralatan dan sarana yang dimiliki" },
     { slug: "modal", label: "Modal", hint: "Uang yang disetor pemilik" },
     { slug: "dividen", label: "Dividen", hint: "Sisa saldo dan pembagian per pemilik (%)" },

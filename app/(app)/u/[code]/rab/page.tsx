@@ -16,7 +16,7 @@ import { getI18n } from "@/lib/i18n/server";
 import { AddRecordButton, DeleteRecordButton } from "../forms";
 
 export async function generateMetadata(): Promise<Metadata> {
-  return { title: (await getI18n()).t("RAB") };
+  return { title: (await getI18n()).t("RAB Budget") };
 }
 export const dynamic = "force-dynamic";
 
@@ -147,15 +147,15 @@ export default async function BudgetPage({ params }: { params: Promise<{ code: s
     <div>
       <PageHeader
         eyebrow={unit.name}
-        title={t("RAB")}
+        title={t("RAB Budget")}
         description={t("Rencana Anggaran Biaya: perkiraan seluruh pengeluaran, dari biaya yang berulang tiap minggu sampai biaya yang dikeluarkan sekali.")}
         actions={canInput && <AddRecordButton kind="budget" ctx={formCtx}  />}
       />
 
       <GuideCard
         id="rab"
-        title={t("Cara membaca halaman RAB")}
-        intro={t("RAB (Rencana Anggaran Biaya) adalah perkiraan uang yang akan keluar. Biayanya dibagi dua kelompok: yang berulang setiap minggu pertandingan, dan yang dikeluarkan satu kali saja. Setiap kelompok dibagi lagi menjadi kategori dan baris biaya.")}
+        title={t("Cara membaca halaman RAB Budget")}
+        intro={t("RAB Budget (Rencana Anggaran Biaya) adalah perkiraan uang yang akan keluar. Biayanya dibagi dua kelompok: yang berulang setiap minggu pertandingan, dan yang dikeluarkan satu kali saja. Setiap kelompok dibagi lagi menjadi kategori dan baris biaya.")}
         terms={[
           { term: t("Mingguan"), text: t("Biaya yang keluar setiap minggu pertandingan (sewa lapangan, honor wasit, konsumsi). Dikalikan jumlah minggu program.") },
           { term: t("Bulanan"), text: t("Biaya yang dikeluarkan satu kali (peralatan, hadiah, seragam, publikasi). Dihitung sekali dalam total.") },
@@ -163,7 +163,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ code: s
           { term: t("Estimasi OPEX"), text: t("OPEX = biaya operasional. Estimasi = total mingguan seluruh program ditambah total bulanan.") },
           { term: t("Aset / Non aset"), text: t("Baris Aset adalah barang yang dimiliki unit; nilainya otomatis tercatat di menu Aset. Non aset hanya menjadi anggaran.") },
         ]}
-        tip={t("Baris RAB yang sudah disimpan tidak dapat diubah lagi, jadi periksa dulu sebelum menyimpan. Baris bertanda “Aset” otomatis masuk ke menu Aset. Biaya yang benar-benar keluar dicatat di menu RAB Actual.")}
+        tip={t("Baris RAB Budget yang sudah disimpan tidak dapat diubah lagi, jadi periksa dulu sebelum menyimpan. Baris bertanda “Aset” otomatis masuk ke menu Aset. Biaya yang benar-benar keluar dicatat di menu RAB Actual.")}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

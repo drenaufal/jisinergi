@@ -44,6 +44,8 @@ export default async function ExpensesPage({ params }: { params: Promise<{ code:
     category: r.category,
     name: r.name,
     amount: r.amount,
+    attendanceDays: r.attendanceDays,
+    dailyRate: r.dailyRate,
     assetType: r.isAsset ? "asset" : "non_asset",
     proofUrl: r.proofUrl,
     note: r.note,
@@ -153,6 +155,11 @@ export default async function ExpensesPage({ params }: { params: Promise<{ code:
                     <TD>
                       <span className="font-medium text-ink">{r.name}</span>
                       {r.isAsset && <Badge className="ml-2 align-middle" tone="info">Aset</Badge>}
+                      {r.attendanceDays != null && r.dailyRate != null && (
+                        <span className="block text-[11px] tabular-nums text-ink-muted">
+                          Absen {fmt.number(r.attendanceDays)} hari × {fmt.rupiah(r.dailyRate)}
+                        </span>
+                      )}
                       {r.note && <span className="block text-[11px] text-ink-muted">{r.note}</span>}
                     </TD>
                     <TD className="text-right font-medium tabular-nums text-ink">{fmt.rupiah(r.amount)}</TD>

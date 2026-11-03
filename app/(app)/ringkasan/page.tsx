@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowUpRight, Building2, Package, Target } from "lucide-react";
+import { ArrowUpRight, Building2, Landmark, Package, Target } from "lucide-react";
 import { requireCapability } from "@/lib/auth/session";
 import { listVisibleUnits } from "@/lib/finance/access";
 import { getAllUnitFigures } from "@/lib/finance/queries";
@@ -50,11 +50,19 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
   const shownLiga = liga(pool);
   const shownSchool = school(pool);
   const ligaTotal = ligaDividend({
-    budget: sum(shownLiga, (x) => x.f.dividend.budget),
     capital: sum(shownLiga, (x) => x.f.dividend.capital),
     registration: sum(shownLiga, (x) => x.f.dividend.registration),
     matchFee: sum(shownLiga, (x) => x.f.dividend.matchFee),
+    actual: sum(shownLiga, (x) => x.f.dividend.actual),
   });
+  // Modal of every unit (both types) adds up for the owner; like the assets, the filter narrows the per-unit table, not the grand total.
+  const capitalOf = (id: string) => figures.get(id)?.figures.capital ?? { total: 0, returned: 0, outstanding: 0, count: 0 };
+  const capitalLigaAll = sum(ligaUnits, (u) => capitalOf(u.id).total);
+  const capitalSchoolAll = sum(schoolUnits, (u) => capitalOf(u.id).total);
+  const capitalAll = capitalLigaAll + capitalSchoolAll;
+  const capitalOutstandingAll = sum(units, (u) => capitalOf(u.id).outstanding);
+  const capitalCountAll = sum(units, (u) => capitalOf(u.id).count);
+  const shownCapitalUnits = pool.filter((u) => capitalOf(u.id).count > 0 || selected);
   // Assets of every unit (both types) add up for the owner; the filter narrows the per-unit table, not the grand total.
   const assetOf = (id: string) => figures.get(id)?.figures.assets ?? { total: 0, count: 0 };
   const assetsLigaAll = sum(ligaUnits, (u) => assetOf(u.id).total);
@@ -142,9 +150,10 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
             </div>
           </section>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
             <Kpi label="Dividen Liga" value={fmt.rupiahCompact(owner.liga)} full={fmt.rupiah(owner.liga)} block="red" hint={`${fmt.number(ligaUnits.length)} unit Liga`} />
             <Kpi label="Dividen Sekolah Bola" value={fmt.rupiahCompact(owner.sekolahBola)} full={fmt.rupiah(owner.sekolahBola)} block="blue" hint={`${fmt.number(schoolUnits.length)} unit Sekolah Bola`} />
+            <Kpi label="Total modal" value={fmt.rupiahCompact(capitalAll)} full={fmt.rupiah(capitalAll)} icon={<Landmark className="size-4" />} block="white" hint={`Liga ${fmt.rupiahCompact(capitalLigaAll)} · Sekolah Bola ${fmt.rupiahCompact(capitalSchoolAll)}`} />
             <Kpi label="Total aset" value={fmt.rupiahCompact(assetsAll)} full={fmt.rupiah(assetsAll)} icon={<Package className="size-4" />} block="yellow" hint={`Liga ${fmt.rupiahCompact(assetsLigaAll)} · Sekolah Bola ${fmt.rupiahCompact(assetsSchoolAll)}`} />
             <Kpi label="Total unit" value={fmt.number(units.length)} block="white" hint={`${fmt.number(ligaUnits.length)} Liga · ${fmt.number(schoolUnits.length)} Sekolah Bola`} />
             <Kpi label="Target" value="Rp 3 M" full={fmt.rupiah(owner.target)} block="white" hint="Dividen Liga + Sekolah Bola" />
@@ -154,11 +163,12 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
             <GuideCard
               id="owner"
               title="Cara membaca ringkasan Owner"
-              intro="Bagian atas menjumlahkan dividen semua unit dan membandingkannya dengan target. Di bawahnya, dividen Liga dan dividen Sekolah Bola dijelaskan sendiri-sendiri karena rumusnya berbeda. Filter unit hanya mempengaruhi bagian penjelasan, bukan angka target."
+              intro="Bagian atas menjumlahkan dividen semua unit dan membandingkannya dengan target. Di bawahnya, dividen Liga dan dividen Sekolah Bola dijelaskan sendiri-sendiri karena rumusnya berbeda, disusul akumulasi modal dan aset. Filter unit hanya mempengaruhi tabel per unit, bukan angka target maupun total modal dan aset."
               terms={[
-                { term: "Dividen Liga", text: "RAB − (uang modal + uang masuk registrasi + uang masuk match fee), dihitung per unit Liga." },
+                { term: "Dividen Liga", text: "(Uang modal + uang masuk registrasi + uang masuk match fee) − RAB Actual, dihitung per unit Liga." },
                 { term: "Dividen Sekolah Bola", text: "Pemasukan − pengeluaran, dihitung per bulan lalu dijumlahkan, per unit Sekolah Bola." },
                 { term: "Akumulasi", text: "Dividen Liga ditambah dividen Sekolah Bola dari semua unit." },
+                { term: "Total modal", text: "Uang yang disetor pemilik ke semua unit, Liga dan Sekolah Bola, dari menu Modal masing-masing unit. Tidak ikut mengubah dividen Sekolah Bola." },
                 { term: "Total aset", text: "Nilai seluruh aset dari semua unit, Liga dan Sekolah Bola. Aset berasal dari menu Aset, baris RAB bertanda Aset, dan pengeluaran Sekolah Bola bertanda Aset." },
               ]}
             />
@@ -179,12 +189,12 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
                     <Formula
                       title={selected ? `Perhitungan — ${selected.name}` : "Perhitungan — semua unit Liga"}
-                      formula="Dividen = RAB − (Uang modal + Registrasi + Match fee)"
+                      formula="Dividen = (Uang modal + Registrasi + Match fee) − RAB Actual"
                       lines={[
-                        { label: "RAB (estimasi OPEX)", value: fmt.rupiah(ligaTotal.budget) },
-                        { op: "−", label: "Uang modal", value: fmt.rupiah(ligaTotal.capital) },
-                        { op: "−", label: "Uang masuk registrasi", value: fmt.rupiah(ligaTotal.registration) },
-                        { op: "−", label: "Uang masuk match fee", value: fmt.rupiah(ligaTotal.matchFee) },
+                        { label: "Uang modal", value: fmt.rupiah(ligaTotal.capital) },
+                        { op: "+", label: "Uang masuk registrasi", value: fmt.rupiah(ligaTotal.registration) },
+                        { op: "+", label: "Uang masuk match fee", value: fmt.rupiah(ligaTotal.matchFee) },
+                        { op: "−", label: "RAB Actual", value: fmt.rupiah(ligaTotal.actual) },
                       ]}
                       resultLabel="Dividen Liga"
                       result={fmt.rupiah(ligaTotal.value)}
@@ -196,10 +206,10 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                           <THead>
                             <TR className="hover:bg-transparent">
                               <TH>Unit</TH>
-                              <TH className="text-right">RAB</TH>
                               <TH className="text-right">Modal</TH>
                               <TH className="text-right">Registrasi</TH>
                               <TH className="text-right">Match fee</TH>
+                              <TH className="text-right">RAB Actual</TH>
                               <TH className="text-right">Dividen</TH>
                             </TR>
                           </THead>
@@ -211,10 +221,10 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                                     {unit.name} <ArrowUpRight className="size-3" />
                                   </Link>
                                 </TD>
-                                <TD className="text-right tabular-nums">{fmt.rupiahCompact(f.dividend.budget)}</TD>
                                 <TD className="text-right tabular-nums">{fmt.rupiahCompact(f.dividend.capital)}</TD>
                                 <TD className="text-right tabular-nums">{fmt.rupiahCompact(f.dividend.registration)}</TD>
                                 <TD className="text-right tabular-nums">{fmt.rupiahCompact(f.dividend.matchFee)}</TD>
+                                <TD className="text-right tabular-nums">{fmt.rupiahCompact(f.dividend.actual)}</TD>
                                 <TD className="text-right font-semibold tabular-nums text-ink">{fmt.rupiahCompact(f.dividend.value)}</TD>
                               </TR>
                             ))}
@@ -313,6 +323,63 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                 )}
               </section>
             )}
+
+            {/* ── Modal ────────────────────────────────────────────── */}
+            <section className="mt-10">
+              <h2 className="mb-3 border-b-2 border-black pb-2 text-lg font-semibold tracking-tight">Modal</h2>
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+                <section className="border border-ink bg-white">
+                  <header className="border-b border-ink px-5 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Akumulasi modal — semua unit</p>
+                  </header>
+                  <div className="space-y-3 p-5">
+                    <p className="text-3xl font-semibold tabular-nums text-ink" title={fmt.rupiah(capitalAll)}>{fmt.rupiah(capitalAll)}</p>
+                    <p className="text-xs text-ink-muted">{fmt.number(capitalCountAll)} setoran tercatat · {fmt.rupiah(capitalOutstandingAll)} belum kembali</p>
+                    <dl className="divide-y divide-line border border-line text-sm">
+                      <div className="flex items-center justify-between px-3 py-2"><dt className="text-ink-secondary">Modal Liga</dt><dd className="font-semibold tabular-nums text-ink">{fmt.rupiah(capitalLigaAll)}</dd></div>
+                      <div className="flex items-center justify-between px-3 py-2"><dt className="text-ink-secondary">Modal Sekolah Bola</dt><dd className="font-semibold tabular-nums text-ink">{fmt.rupiah(capitalSchoolAll)}</dd></div>
+                    </dl>
+                  </div>
+                </section>
+                <Card>
+                  <CardContent className="space-y-3">
+                    <BlockTitle title="Modal per unit" hint={selected ? `Unit yang dipilih: ${selected.name}` : "Semua unit, dari yang bermodal terbesar."} />
+                    {shownCapitalUnits.length === 0 ? (
+                      <p className="py-4 text-center text-xs text-ink-muted">Belum ada modal tercatat.</p>
+                    ) : (
+                      <Table>
+                        <THead>
+                          <TR className="hover:bg-transparent">
+                            <TH>Unit</TH>
+                            <TH>Jenis</TH>
+                            <TH className="text-right">Setoran</TH>
+                            <TH className="text-right">Belum kembali</TH>
+                            <TH className="text-right">Modal</TH>
+                          </TR>
+                        </THead>
+                        <TBody>
+                          {[...shownCapitalUnits]
+                            .sort((a, b) => capitalOf(b.id).total - capitalOf(a.id).total)
+                            .map((u) => (
+                              <TR key={u.id}>
+                                <TD>
+                                  <Link href={menuHref(u.code, "modal")} className="inline-flex items-center gap-1 font-semibold text-ink underline decoration-ink/30 underline-offset-2 hover:decoration-ink">
+                                    {u.name} <ArrowUpRight className="size-3" />
+                                  </Link>
+                                </TD>
+                                <TD>{UNIT_TYPE_LABEL[u.type]}</TD>
+                                <TD className="text-right tabular-nums">{fmt.number(capitalOf(u.id).count)}</TD>
+                                <TD className="text-right tabular-nums">{fmt.rupiah(capitalOf(u.id).outstanding)}</TD>
+                                <TD className="text-right font-semibold tabular-nums text-ink">{fmt.rupiah(capitalOf(u.id).total)}</TD>
+                              </TR>
+                            ))}
+                        </TBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </section>
 
             {/* ── Aset ─────────────────────────────────────────────── */}
             <section className="mt-10">

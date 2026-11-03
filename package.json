@@ -18,7 +18,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed:owner": "tsx scripts/seed-owner.ts",
     "db:seed:demo": "tsx scripts/seed-demo.ts",
-    "db:import:excel": "tsx scripts/import-excel.ts"
+    "db:import:excel": "tsx scripts/import-excel.ts",
+    "db:import:ganador": "tsx scripts/import-ganador.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

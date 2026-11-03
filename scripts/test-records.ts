@@ -170,11 +170,16 @@ async function main() {
     eq2((await db.select().from(s.finCapital).where(eq(s.finCapital.businessUnitId, school.id))).length, 2, "Sekolah Bola: it has a Modal menu");
     await deleteFinanceRecord({ t, actor, scope: owner, kind: "expense", id: ball.id });
     eq2((await schoolAssets()).map((x) => x.name), ["Gawang kecil"], "Pengeluaran: deleting the expense deletes its asset, not the hand-typed one");
+    await save(school, "expense", expense({ name: "Gaji Fikri", category: "Gaji", amount: "1400000", attendanceDays: "8", dailyRate: "175000" }));
+    await save(school, "expense", expense({ name: "Gaji Apen", category: "Gaji", amount: "1500000", attendanceDays: "", dailyRate: "" }));
+    const salaries = (await db.select().from(s.finExpenses).where(and(eq(s.finExpenses.businessUnitId, school.id), eq(s.finExpenses.category, "Gaji")))).sort((x, y) => x.name.localeCompare(y.name));
+    eq2(salaries.map((x) => [x.name, x.attendanceDays, x.dailyRate]), [["Gaji Apen", null, null], ["Gaji Fikri", 8, 175000]], "Pengeluaran: absen and gaji satuan are saved on a salary row and stay empty on a fixed one");
 
     /* ── Sekolah Bola: a registration covers its month ── */
-    await save(school, "student", parseKind("student", { name: "Anak Uji", nickname: "", joinedOn: "2026-10-01", birthDate: "2015-04-12", jerseyNumber: "", note: "" }));
+    await save(school, "student", parseKind("student", { name: "Anak Uji", nickname: "", joinedOn: "2026-10-01", birthDate: "2015-04-12", jerseyNumber: "", nik: "GDJ001", birthPlace: "Jakarta", parentPhone: "0895403942345", jerseySize: "L", sizeType: "Size Anak", note: "" }));
     const [student] = await db.select().from(s.finStudents).where(eq(s.finStudents.businessUnitId, school.id));
     eq2(student.birthDate, "2015-04-12", "Siswa: the birth date is saved");
+    eq2([student.nik, student.birthPlace, student.parentPhone, student.jerseySize, student.sizeType], ["GDJ001", "Jakarta", "0895403942345", "L", "Size Anak"], "Siswa: NIK, birth place, parent's phone (leading zero kept) and jersey size are saved");
     const pay = (raw: Record<string, string>) => parseKind("payment", { studentId: student.id, kind: "monthly", paidOn: "2026-10-05", amount: "200000", discount: "", period: "2026-10", proofUrl: "", note: "", ...raw });
     await save(school, "payment", pay({ kind: "monthly", period: "2026-09", paidOn: "2026-09-05" }));
     await rejects(save(school, "payment", pay({ kind: "registration", paidOn: "2026-09-20", amount: "500000", period: "" })), "Pembayaran: a registration cannot cover a month whose fee was paid separately", /Hapus iuran bulanannya/);
@@ -251,6 +256,10 @@ async function main() {
     if (schoolFigures.type !== "sekolah_bola" || ligaFigures.type !== "liga") throw new Error("unexpected figures");
     eq2([schoolFigures.figures.assets, schoolFigures.figures.income.total], [{ total: 300000, count: 1 }, 500000 + 200000 + 200000], "Dashboard: a school's assets are counted, and income has registration + monthly but no jersey");
     eq2(ligaFigures.figures.assets.total, 1000000 + 450000, "Dashboard: a Liga's assets include the one made from the RAB");
+    const costsTotal = (await listActualCosts(liga.id)).reduce((total, c) => total + c.amount, 0);
+    eq2([ligaFigures.figures.actual.total, ligaFigures.figures.dividend.actual], [costsTotal, costsTotal], "Dashboard: a Liga's RAB Actual is every real cost of the unit");
+    eq2(ligaFigures.figures.dividend.value, ligaFigures.figures.dividend.funding - costsTotal, "Dashboard: the Liga dividend is (modal + registrasi + match fee) − RAB Actual");
+    eq2([ligaFigures.figures.capital.total, schoolFigures.figures.capital.total], [0, 10000000 + 5000000], "Dashboard: modal is counted for both unit types");
     const admin = scopeOf({ role: "unit_admin", unitId: school.id });
     const pinned = await save(liga, "asset", parseKind("asset", { purchasedOn: "2026-10-05", name: "Dipaksa", amount: "1", proofUrl: "", note: "" }), null, admin);
     eq2(pinned.unitId, school.id, "Access: a unit admin is pinned to their own unit even when the form names another one");

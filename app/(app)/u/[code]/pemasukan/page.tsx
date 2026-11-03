@@ -65,6 +65,11 @@ export default async function IncomePage({
     joinedOn: s.joinedOn,
     birthDate: s.birthDate,
     jerseyNumber: s.jerseyNumber,
+    nik: s.nik,
+    birthPlace: s.birthPlace,
+    parentPhone: s.parentPhone,
+    jerseySize: s.jerseySize,
+    sizeType: s.sizeType,
     note: s.note,
   });
   const paymentRecord = (p: (typeof payments)[number]): FinanceRecord => ({
@@ -189,7 +194,7 @@ export default async function IncomePage({
                       <TH><ColumnHead label="Nama anak" hint="Nama panggilan" /></TH>
                       <TH><ColumnHead label="Tanggal lahir" hint="Anak" /></TH>
                       <TH><ColumnHead label="Bergabung" hint="Tanggal masuk" /></TH>
-                      <TH className="text-center"><ColumnHead label="No punggung" align="center" /></TH>
+                      <TH className="text-center"><ColumnHead label="No punggung" hint="Ukuran jersey" align="center" /></TH>
                       <TH><ColumnHead label="Registrasi" hint="Uang · diskon" /></TH>
                       <TH><ColumnHead label={`Bulan ini`} hint={monthLabel(month)} /></TH>
                       <TH className="text-right"><ColumnHead label="Total dibayar" hint="Semua jenis" align="right" /></TH>
@@ -206,11 +211,22 @@ export default async function IncomePage({
                           <TD className="tabular-nums text-ink-muted">{i + 1}</TD>
                           <TD>
                             <span className="font-medium text-ink">{s.name}</span>
-                            {s.nickname && <span className="block text-[11px] text-ink-muted">“{s.nickname}”</span>}
+                            {(s.nickname || s.nik) && (
+                              <span className="block text-[11px] text-ink-muted">
+                                {[s.nickname && `“${s.nickname}”`, s.nik].filter(Boolean).join(" · ")}
+                              </span>
+                            )}
+                            {s.parentPhone && <span className="block text-[11px] tabular-nums text-ink-muted">Telp. {s.parentPhone}</span>}
                           </TD>
-                          <TD className="whitespace-nowrap tabular-nums">{s.birthDate ? fmt.date(s.birthDate) : "—"}</TD>
+                          <TD className="whitespace-nowrap tabular-nums">
+                            {s.birthDate ? fmt.date(s.birthDate) : "—"}
+                            {s.birthPlace && <span className="block text-[11px] text-ink-muted">{s.birthPlace}</span>}
+                          </TD>
                           <TD className="whitespace-nowrap tabular-nums">{fmt.date(s.joinedOn)}</TD>
-                          <TD className="text-center tabular-nums">{s.jerseyNumber ?? "—"}</TD>
+                          <TD className="text-center tabular-nums">
+                            {s.jerseyNumber ?? "—"}
+                            {(s.jerseySize || s.sizeType) && <span className="block text-[11px] text-ink-muted">{[s.jerseySize, s.sizeType].filter(Boolean).join(" · ")}</span>}
+                          </TD>
                           <TD>
                             {reg ? (
                               <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">

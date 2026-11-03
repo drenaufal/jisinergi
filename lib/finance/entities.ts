@@ -52,6 +52,10 @@ export const moneyField = (t: TFunction) =>
       .max(MAX_RUPIAH, t("Nominal terlalu besar — periksa jumlah nol")),
   );
 
+/** Optional amount where blank stays blank (null): "not filled in" is not the same as 0. */
+const optionalMoney = (t: TFunction) =>
+  z.preprocess((v) => (v === "" || v == null ? null : digits(v)), moneyField(t).nullable());
+
 /** Optional amount: blank means 0. */
 const moneyOrZero = (t: TFunction) =>
   z.preprocess((v) => (v === "" || v == null ? 0 : digits(v)), moneyField(t));
@@ -205,6 +209,11 @@ export const studentSchema = (t: TFunction) =>
     joinedOn: dateField(t),
     birthDate: optionalDate(t),
     jerseyNumber: optionalInt(t, 0, 999, "Nomor punggung harus antara 0 dan 999"),
+    nik: optionalText(t, 40),
+    birthPlace: optionalText(t, 80),
+    parentPhone: optionalText(t, 40),
+    jerseySize: optionalText(t, 20),
+    sizeType: optionalText(t, 40),
     note: note(t),
   });
 
@@ -243,6 +252,8 @@ export const expenseSchema = (t: TFunction) =>
       category: text(t, "Kategori wajib diisi", 120),
       name: text(t, "Keterangan pengeluaran wajib diisi", 200),
       amount: moneyField(t),
+      attendanceDays: optionalInt(t, 0, 366, "Absen harus berupa angka bulat 0–366 hari"),
+      dailyRate: optionalMoney(t),
       assetType: assetType(t),
       proofUrl: proof(t),
       note: note(t),
@@ -327,7 +338,7 @@ export const ENTITIES: Record<FinanceKind, EntityDef> = {
     title: (r) => asText(r.name),
   },
   budget: {
-    label: msg("RAB"),
+    label: msg("RAB Budget"),
     table: finBudgetItems,
     schema: budgetSchema,
     proofs: [],

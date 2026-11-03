@@ -78,7 +78,7 @@ const COPY = {
   student: {
     add: msg("Tambah siswa"),
     edit: msg("Ubah data siswa"),
-    hint: msg("Data anak: nama, tanggal bergabung, nomor punggung, nama panggilan, dan tanggal lahir."),
+    hint: msg("Data anak: nama, NIK, tanggal bergabung, tempat dan tanggal lahir, nomor punggung, ukuran jersey, dan nomor telepon orang tua."),
   },
   payment: {
     add: msg("Catat pembayaran"),
@@ -347,8 +347,23 @@ function RecordForm({
             <Field label={t("Tanggal bergabung")} error={fe.joinedOn}>
               <Input type="date" name="joinedOn" required defaultValue={val("joinedOn", today())} />
             </Field>
+            <Field label={t("Tempat lahir")} error={fe.birthPlace} hint={t("Opsional")}>
+              <Input name="birthPlace" maxLength={80} defaultValue={val("birthPlace")} />
+            </Field>
             <Field label={t("Tanggal lahir")} error={fe.birthDate} hint={t("Opsional")}>
               <Input type="date" name="birthDate" defaultValue={val("birthDate")} />
+            </Field>
+            <Field label={t("NIK")} error={fe.nik} hint={t("Nomor induk siswa di sekolah, mis. GDJ001. Opsional.")}>
+              <Input name="nik" maxLength={40} defaultValue={val("nik")} />
+            </Field>
+            <Field label={t("No telepon orang tua")} error={fe.parentPhone} hint={t("Opsional")}>
+              <Input type="tel" name="parentPhone" maxLength={40} defaultValue={val("parentPhone")} />
+            </Field>
+            <Field label={t("Ukuran jersey")} error={fe.jerseySize} hint={t("mis. M, L, XXL. Opsional.")}>
+              <Input name="jerseySize" maxLength={20} defaultValue={val("jerseySize")} />
+            </Field>
+            <Field label={t("Tipe ukuran")} error={fe.sizeType} hint={t("mis. Size Anak. Opsional.")}>
+              <Input name="sizeType" maxLength={40} defaultValue={val("sizeType")} />
             </Field>
           </Section>
         )}
@@ -420,6 +435,12 @@ function RecordForm({
             </Field>
             <Field label={t("Keterangan")} error={fe.name} hint={t("mis. Sewa lapangan, bola latihan")}>
               <Input name="name" required maxLength={200} defaultValue={val("name")} />
+            </Field>
+            <Field label={t("Absen (hari)")} error={fe.attendanceDays} hint={t("Khusus gaji. Opsional.")}>
+              <Input type="number" name="attendanceDays" min={0} max={366} step={1} defaultValue={val("attendanceDays")} />
+            </Field>
+            <Field label={t("Gaji satuan")} error={fe.dailyRate} hint={t("Gaji per hari hadir. Opsional; nominal di atas tetap yang dibayarkan.")}>
+              <MoneyInput name="dailyRate" defaultValue={val("dailyRate")} invalid={!!fe.dailyRate} />
             </Field>
             <AssetRadio
               value={assetKind}

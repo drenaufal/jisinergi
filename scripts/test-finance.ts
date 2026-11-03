@@ -22,6 +22,7 @@ import {
   sum,
   unitFigures,
   expenseByCategory,
+  financialReport,
   incomeByKind,
   incomeMonthsByKind,
   ligaDividend,
@@ -60,6 +61,8 @@ import {
 import { makeEditUnitSchema, makeNewLoginSchema, makeNewUnitSchema } from "@/lib/finance/unit-schemas";
 import {
   EXCEL_CONTROL_TOTALS as X,
+  SEED_ACTUAL_COSTS,
+  SEED_ACTUAL_EXTRA,
   SEED_ASSETS,
   SEED_BUDGET,
   SEED_CAPITAL,
@@ -77,6 +80,7 @@ import {
   DEMO_REGISTRATION_FEE,
   DEMO_STUDENTS,
 } from "@/lib/finance/demo-school";
+import { expenseCategory, isoOfSerial } from "./lib/excel-ganador";
 import { createT } from "@/lib/i18n/translate";
 import { makeFormatters } from "@/lib/i18n/format";
 
@@ -162,11 +166,17 @@ eq([liga.capital.total, liga.assets.total, liga.income, liga.budget.total], [600
 ok(Math.abs(liga.budgetCoverage - 33500000 / 265200000) < 1e-12, "Liga: income covers 12.6% of the budget");
 eq(unitFigures({ ...ligaData, budget: [] }).budgetCoverage, 0, "no budget → coverage 0, not NaN");
 
-// Dividen (Liga) = RAB − (modal + registrasi + match fee)
-eq(liga.dividend, { budget: 265200000, capital: 60000000, registration: 7500000, matchFee: 26000000, funding: 93500000, value: 171700000 }, "DIVIDEN LIGA: 265,2 jt − (60 jt + 7,5 jt + 26 jt) = 171,7 jt");
-eq(ligaDividend({ budget: 100, capital: 30, registration: 20, matchFee: 10 }).value, 40, "DIVIDEN LIGA: 100 − (30 + 20 + 10) = 40");
-eq(ligaDividend({ budget: 50, capital: 30, registration: 20, matchFee: 10 }).value, -10, "DIVIDEN LIGA: may be negative when funding exceeds the RAB");
-eq(ligaDividend({ budget: 0, capital: 0, registration: 0, matchFee: 0 }).value, 0, "DIVIDEN LIGA: an empty unit is 0");
+// Dividen (Liga) = (modal + registrasi + match fee) − RAB Actual
+const actualCosts = [...SEED_ACTUAL_COSTS.map((c) => ({ amount: c.amount })), { amount: SEED_ACTUAL_EXTRA.amount }];
+const actualTotal = sum(actualCosts, (c) => c.amount);
+const ligaActual = unitFigures({ ...ligaData, actualCosts });
+eq(liga.dividend, { capital: 60000000, registration: 7500000, matchFee: 26000000, actual: 0, funding: 93500000, value: 93500000 }, "DIVIDEN LIGA: before any real cost, the dividend is everything that came in (60 jt + 7,5 jt + 26 jt)");
+eq([ligaActual.actual.total, ligaActual.actual.count], [actualTotal, actualCosts.length], "RAB Actual: the total is every real cost, on RAB lines and outside the RAB");
+eq(ligaActual.dividend, { capital: 60000000, registration: 7500000, matchFee: 26000000, actual: actualTotal, funding: 93500000, value: 93500000 - actualTotal }, "DIVIDEN LIGA: (60 jt + 7,5 jt + 26 jt) − RAB Actual");
+eq(unitFigures({ ...ligaData, actualCosts, budget: [] }).dividend.value, ligaActual.dividend.value, "DIVIDEN LIGA: the RAB Budget no longer enters the dividend");
+eq(ligaDividend({ capital: 30, registration: 20, matchFee: 10, actual: 25 }).value, 35, "DIVIDEN LIGA: (30 + 20 + 10) − 25 = 35");
+eq(ligaDividend({ capital: 30, registration: 20, matchFee: 10, actual: 70 }).value, -10, "DIVIDEN LIGA: may be negative when the real costs exceed the money in");
+eq(ligaDividend({ capital: 0, registration: 0, matchFee: 0, actual: 0 }).value, 0, "DIVIDEN LIGA: an empty unit is 0");
 
 /* ── Sekolah Bola ── */
 const pay = (studentId: string, kind: PaymentAmounts["kind"], paidOn: string, amount: number, discount = 0, period: string | null = null): PaymentAmounts => ({ studentId, kind, paidOn, amount, discount, period });
@@ -197,6 +207,31 @@ eq([schoolFull.assets, schoolFull.capital.total, schoolFull.capital.outstanding,
 eq(schoolFull.dividend, school.dividend, "SEKOLAH BOLA: the sisa saldo ignores modal and assets");
 eq(sum(school.months, (m) => m.dividend), school.dividend, "the months add up to the accumulated dividend");
 eq(schoolFigures({ students: 0, payments: [], expenses: [] }).months, [], "an empty school has no months");
+
+/* ── Laporan keuangan: the "LAPORAN KEUANGAN" sheet ── */
+const stamped = (ms: number) => new Date(Date.UTC(2026, 10, 3, 0, 0, 0, ms));
+const report = financialReport({
+  openingBalance: 100_000_000,
+  payments: [
+    { kind: "monthly", paidOn: "2026-08-28", amount: 500_000, period: "2026-08", studentName: "Alif", createdAt: stamped(5) },
+    { kind: "registration", paidOn: "2026-07-28", amount: 650_000, period: null, studentName: "Benzema", createdAt: stamped(2) },
+  ],
+  expenses: [
+    { spentOn: "2026-07-28", category: "Gaji", name: "Gaji Fikri", amount: 1_400_000, attendanceDays: 8, dailyRate: 175_000, createdAt: stamped(1) },
+    { spentOn: "2026-06-03", category: "Perlengkapan", name: "Pembelian Bola size 5", amount: 1_500_000, attendanceDays: null, dailyRate: null, createdAt: stamped(9) },
+  ],
+});
+eq(report.rows.map((r) => [r.no, r.date, r.note]), [[1, "2026-06-03", "Pembelian Bola size 5"], [2, "2026-07-28", "Gaji Fikri"], [3, "2026-07-28", "Benzema"], [4, "2026-08-28", "Alif"]], "LAPORAN: oldest first, rows of one day keep the order they were entered in, numbered from 1");
+eq([report.openingBalance, report.totalIn, report.totalOut, report.balance], [100_000_000, 1_150_000, 2_900_000, 98_250_000], "LAPORAN: sisa saldo = saldo awal + total masuk − total keluar");
+eq(report.rows.map((r) => [r.direction, r.cashIn, r.cashOut]), [["out", 0, 1_500_000], ["out", 0, 1_400_000], ["in", 650_000, 0], ["in", 500_000, 0]], "LAPORAN: money in fills Cash In, money out fills Cash Out");
+eq([report.rows[1].attendanceDays, report.rows[1].dailyRate, report.rows[0].attendanceDays], [8, 175_000, null], "LAPORAN: salary rows carry absen and gaji satuan");
+eq([report.rows[2].kind, report.rows[2].period], ["registration", "2026-07"], "LAPORAN: a registration covers the month it was paid in");
+eq(financialReport({ openingBalance: 0, payments: [], expenses: [] }), { openingBalance: 0, totalIn: 0, totalOut: 0, balance: 0, rows: [] }, "LAPORAN: an empty school reports zeros");
+eq(financialReport({ openingBalance: 5_000_000, payments: [], expenses: [{ spentOn: "2026-06-03", category: "x", name: "y", amount: 8_000_000, attendanceDays: null, dailyRate: null, createdAt: stamped(1) }] }).balance, -3_000_000, "LAPORAN: the balance may go negative");
+
+/* ── Excel import helpers (scripts/lib/excel-ganador.ts) ── */
+eq([isoOfSerial(46176), isoOfSerial(46170), isoOfSerial(45870), isoOfSerial(43229)], ["2026-06-03", "2026-05-28", "2025-08-01", "2018-05-09"], "Excel day numbers → dates");
+eq(["Gaji Fikri", "Sewa Lapangan", "Pembelian Bola size 4", "Gawang Kecil & Cone", "Rompi 3 Set", "Tas bola, print & Map", "Laundry Rompi", "Roll Banner"].map(expenseCategory), ["Gaji", "Sewa lapangan", "Perlengkapan", "Perlengkapan", "Perlengkapan", "Perlengkapan", "Operasional", "Operasional"], "Excel import: an expense category is read from its description");
 eq(incomeMonthsByKind(payments).map((m) => [m.month, m.registration, m.monthly]), [["2026-08", 400000, 0], ["2026-09", 500000, 150000], ["2026-10", 0, 200000]], "income per month split by kind");
 eq(expenseByCategory(expenses), [{ category: "Sewa lapangan", amount: 1800000 }, { category: "Perlengkapan", amount: 100000 }], "expenses grouped by category, biggest first");
 const st = studentStatus(payments, "a", "2026-09");
@@ -226,7 +261,7 @@ eq(ownerDividend({ liga: 2_500_000_000, sekolahBola: 1_000_000_000, target: DIVI
 ok(ownerDividend({ liga: 2_500_000_000, sekolahBola: 1_000_000_000, target: DIVIDEND_TARGET }).progress > 1, "OWNER: progress may exceed 100%");
 eq(ownerDividend({ liga: 100, sekolahBola: -300, target: DIVIDEND_TARGET }).progress, 0, "OWNER: a negative accumulation counts as 0% progress, not negative");
 eq(ownerDividend({ liga: 0, sekolahBola: 0, target: DIVIDEND_TARGET }).remaining, DIVIDEND_TARGET, "OWNER: with nothing yet, the whole target remains");
-eq(ownerDividend({ liga: liga.dividend.value, sekolahBola: school.dividend, target: DIVIDEND_TARGET }).accumulated, 171700000 - 650000, "OWNER: the accumulated figure is the Liga formula plus the school dividend");
+eq(ownerDividend({ liga: ligaActual.dividend.value, sekolahBola: school.dividend, target: DIVIDEND_TARGET }).accumulated, 93500000 - actualTotal - 650000, "OWNER: the accumulated figure is the Liga formula plus the school dividend");
 
 /* ── Input validation ── */
 const date = "2026-10-22";
@@ -255,6 +290,9 @@ ok(studentSchema(t).safeParse({ name: "Anak Contoh", nickname: "", joinedOn: dat
 ok(!studentSchema(t).safeParse({ name: "", joinedOn: date, jerseyNumber: "7" }).success, "student: a name is required");
 ok(!studentSchema(t).safeParse({ name: "X", joinedOn: date, jerseyNumber: "1000" }).success && !studentSchema(t).safeParse({ name: "X", joinedOn: date, jerseyNumber: "-1" }).success, "student: jersey number 0–999");
 ok(!studentSchema(t).safeParse({ name: "X", joinedOn: "" }).success, "student: the join date is required");
+const studentFull = studentSchema(t).parse({ name: "Alif", joinedOn: date, nik: " GDJ001 ", birthPlace: "Jakarta", parentPhone: "0895403942345", jerseySize: "XXL", sizeType: "Size Anak" }) as Record<string, unknown>;
+eq([studentFull.nik, studentFull.birthPlace, studentFull.parentPhone, studentFull.jerseySize, studentFull.sizeType], ["GDJ001", "Jakarta", "0895403942345", "XXL", "Size Anak"], "student: NIK, birth place, parent's phone and jersey size are kept (the phone keeps its leading zero)");
+eq([studentFull.nik === undefined, (studentSchema(t).parse({ name: "X", joinedOn: date, nik: "", parentPhone: "" }) as Record<string, unknown>).nik], [false, null], "student: blank NIK and phone are stored as nothing");
 const pm = (o: Record<string, string>) => paymentSchema(t).safeParse({ studentId: "s1", kind: "monthly", paidOn: date, amount: "200000", discount: "", period: "2026-10", proofUrl: "", note: "", ...o });
 ok(pm({}).success, "payment: a monthly fee with its month");
 ok(!pm({ period: "" }).success && !pm({ period: "2026-13" }).success && !pm({ period: "Oktober" }).success, "payment: a monthly fee needs a real month");
@@ -265,6 +303,11 @@ eq((pm({ discount: "50000" }) as { data: { discount: number } }).data.discount, 
 ok(!pm({ studentId: "" }).success && !pm({ kind: "donation" }).success && !pm({ amount: "" }).success, "payment: student, a known kind and an amount are required");
 ok(expenseSchema(t).safeParse({ spentOn: date, category: "Sewa lapangan", name: "Sewa Oktober", amount: "600000", proofUrl: "", note: "" }).success, "expense: a normal row");
 ok(!expenseSchema(t).safeParse({ spentOn: date, category: "", name: "x", amount: "1" }).success && !expenseSchema(t).safeParse({ spentOn: date, category: "x", name: "", amount: "1" }).success, "expense: category and description are required");
+const salary = expenseSchema(t).parse({ spentOn: date, category: "Gaji", name: "Gaji Fikri", amount: "1400000", attendanceDays: "8", dailyRate: "175000", proofUrl: "", note: "" }) as Record<string, unknown>;
+eq([salary.attendanceDays, salary.dailyRate], [8, 175000], "expense: a salary row keeps absen and gaji satuan");
+const noSalary = expenseSchema(t).parse({ spentOn: date, category: "Sewa lapangan", name: "Sewa", amount: "600000", attendanceDays: "", dailyRate: "", proofUrl: "", note: "" }) as Record<string, unknown>;
+eq([noSalary.attendanceDays, noSalary.dailyRate], [null, null], "expense: absen and gaji satuan are optional (blank = not filled in, not 0)");
+ok(!expenseSchema(t).safeParse({ spentOn: date, category: "Gaji", name: "x", amount: "1", attendanceDays: "-1" }).success && !expenseSchema(t).safeParse({ spentOn: date, category: "Gaji", name: "x", amount: "1", attendanceDays: "400" }).success, "expense: absen is 0–366 days");
 ok(ENTITIES.payment.proofs.length === 1 && ENTITIES.expense.proofs.length === 1 && ENTITIES.student.proofs.length === 0, "receipt columns: payment 1, expense 1, student 0");
 ok(ENTITIES.registration.proofs.length === 2 && ENTITIES.asset.proofs.length === 1 && ENTITIES.budget.proofs.length === 0, "receipt columns match the workbooks (aset 1, registrasi DP+lunas, match fee 1)");
 

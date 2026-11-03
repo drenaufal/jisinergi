@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { ArrowUpRight, Calculator, Clock, HandCoins, Landmark, Package, Wallet } from "lucide-react";
+import { ArrowUpRight, Calculator, Clock, HandCoins, Landmark, Package, Receipt, Wallet } from "lucide-react";
 import type { UnitInfo } from "@/lib/finance/access";
 import { ligaDataset } from "@/lib/finance/queries";
-import { budgetByCategory, matchFeeByWeek, unitFigures } from "@/lib/finance/calc";
+import { budgetByCategory, matchFeeByWeek, share, unitFigures } from "@/lib/finance/calc";
 import { menuHref } from "@/lib/finance/unit-types";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,8 +40,17 @@ export async function LigaSummary({ unit }: { unit: UnitInfo }) {
       tone: f.registration.remaining > 0 ? ("warn" as const) : ("default" as const),
       hint: `${fmt.number(f.registration.paidClubs)} dari ${fmt.number(f.registration.clubs)} klub sudah lunas`,
     },
-    { slug: "rab", label: "Anggaran (RAB)", value: f.budget.total, icon: <Calculator className="size-4" />, block: "night" as const, hint: `${fmt.rupiahCompact(f.budget.weeklyPerWeek)} per minggu · ${fmt.rupiahCompact(f.budget.monthly)} bulanan` },
-    { slug: "dividen", label: "Dividen (rumus)", value: f.dividend.value, icon: <HandCoins className="size-4" />, block: "white" as const, hint: "RAB − (modal + registrasi + match fee)" },
+    { slug: "rab", label: "RAB Budget", value: f.budget.total, icon: <Calculator className="size-4" />, block: "night" as const, hint: `${fmt.rupiahCompact(f.budget.weeklyPerWeek)} per minggu · ${fmt.rupiahCompact(f.budget.monthly)} bulanan` },
+    {
+      slug: "rab-actual",
+      label: "RAB Actual",
+      value: f.actual.total,
+      icon: <Receipt className="size-4" />,
+      block: "white" as const,
+      tone: f.budget.total > 0 && f.actual.total > f.budget.total ? ("warn" as const) : ("default" as const),
+      hint: f.budget.total > 0 ? `${pct1(share(f.actual.total, f.budget.total))} dari RAB Budget · ${fmt.number(f.actual.count)} catatan biaya` : `${fmt.number(f.actual.count)} catatan biaya`,
+    },
+    { slug: "dividen", label: "Dividen (rumus)", value: f.dividend.value, icon: <HandCoins className="size-4" />, block: "white" as const, hint: "(modal + registrasi + match fee) − RAB Actual" },
   ];
 
   return (
@@ -56,18 +65,19 @@ export async function LigaSummary({ unit }: { unit: UnitInfo }) {
           { term: "Modal masuk", text: "Uang yang disetor pemodal dan berapa persen yang sudah dikembalikan." },
           { term: "Aset dibeli", text: "Peralatan dan sarana pertandingan yang sudah dibeli." },
           { term: "Uang masuk", text: "Uang dari klub: registrasi (DP + pelunasan) ditambah match fee. Pemasukan lain (sewa stand, parkir) disebut terpisah dan tidak ikut rumus dividen." },
-          { term: "Anggaran (RAB)", text: "Perkiraan seluruh pengeluaran: biaya mingguan seluruh program ditambah biaya bulanan." },
-          { term: "Dividen (rumus)", text: "RAB dikurangi (uang modal + registrasi + match fee). Dihitung otomatis, lalu dibagi ke para pemilik di menu Dividen." },
+          { term: "RAB Budget", text: "Perkiraan seluruh pengeluaran: biaya mingguan seluruh program ditambah biaya bulanan." },
+          { term: "RAB Actual", text: "Biaya yang benar-benar sudah keluar, termasuk biaya di luar RAB Budget." },
+          { term: "Dividen (rumus)", text: "(Uang modal + registrasi + match fee) dikurangi RAB Actual. Dihitung otomatis, lalu dibagi ke para pemilik di menu Dividen." },
         ]}
       />
 
       {empty && (
         <Notice tone="info" title="Belum ada data keuangan" className="mb-4">
-          Mulai dari menu Modal, Aset, Registrasi, Match Fee, atau RAB. Angka di halaman ini terisi sendiri begitu data dimasukkan.
+          Mulai dari menu Modal, Aset, Registrasi, Match Fee, atau RAB Budget. Angka di halaman ini terisi sendiri begitu data dimasukkan.
         </Notice>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {tiles.map((tile) => (
           <Link key={tile.label} href={link(tile.slug)} className="group block outline-none transition-transform hover:-translate-y-0.5">
             <Kpi label={tile.label} value={fmt.rupiahCompact(tile.value)} full={fmt.rupiah(tile.value)} icon={tile.icon} block={tile.block} tone={tile.tone} hint={tile.hint} />
@@ -78,12 +88,12 @@ export async function LigaSummary({ unit }: { unit: UnitInfo }) {
       <Formula
         className="mt-4"
         title="Perhitungan dividen — Liga"
-        formula="Dividen = RAB − (Uang modal + Uang masuk registrasi + Uang masuk match fee)"
+        formula="Dividen = (Uang modal + Uang masuk registrasi + Uang masuk match fee) − RAB Actual"
         lines={[
-          { label: "RAB (estimasi OPEX)", value: fmt.rupiah(f.dividend.budget), href: link("rab") },
-          { op: "−", label: "Uang modal", value: fmt.rupiah(f.dividend.capital), href: link("modal") },
-          { op: "−", label: "Uang masuk registrasi", value: fmt.rupiah(f.dividend.registration), href: link("registrasi") },
-          { op: "−", label: "Uang masuk match fee", value: fmt.rupiah(f.dividend.matchFee), href: link("match-fee") },
+          { label: "Uang modal", value: fmt.rupiah(f.dividend.capital), href: link("modal") },
+          { op: "+", label: "Uang masuk registrasi", value: fmt.rupiah(f.dividend.registration), href: link("registrasi") },
+          { op: "+", label: "Uang masuk match fee", value: fmt.rupiah(f.dividend.matchFee), href: link("match-fee") },
+          { op: "−", label: "RAB Actual", value: fmt.rupiah(f.dividend.actual), href: link("rab-actual") },
         ]}
         resultLabel="Dividen (rumus)"
         result={fmt.rupiah(f.dividend.value)}
@@ -93,10 +103,10 @@ export async function LigaSummary({ unit }: { unit: UnitInfo }) {
         <CardContent className="space-y-3">
           <BlockTitle
             title="Seberapa jauh anggaran tertutup uang masuk?"
-            hint="Uang masuk dari klub dibandingkan dengan estimasi OPEX di RAB."
+            hint="Uang masuk dari klub dibandingkan dengan estimasi OPEX di RAB Budget."
             right={
               <Link href={link("rab")} className="flex shrink-0 items-center gap-1 text-[11px] text-ink-muted hover:text-ink">
-                Lihat RAB <ArrowUpRight className="size-3" />
+                Lihat RAB Budget <ArrowUpRight className="size-3" />
               </Link>
             }
           />
@@ -109,7 +119,7 @@ export async function LigaSummary({ unit }: { unit: UnitInfo }) {
           <Progress value={f.budgetCoverage * 100} />
           <p className="text-xs text-ink-secondary">
             {f.budget.total === 0
-              ? "Belum ada anggaran (RAB), jadi belum ada pembanding."
+              ? "Belum ada anggaran (RAB Budget), jadi belum ada pembanding."
               : f.budgetCoverage >= 1
                 ? "Uang masuk sudah menutup seluruh estimasi OPEX."
                 : `Masih kurang ${fmt.rupiah(f.budget.total - f.income)} untuk menutup seluruh estimasi OPEX.`}
@@ -163,7 +173,7 @@ export async function LigaSummary({ unit }: { unit: UnitInfo }) {
           </Card>
           <Card className="lg:col-span-3">
             <CardHeader>
-              <CardTitle>Kategori biaya terbesar di RAB</CardTitle>
+              <CardTitle>Kategori biaya terbesar di RAB Budget</CardTitle>
               <Link href={link("rab")} className="flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink">
                 Rincian <ArrowUpRight className="size-3" />
               </Link>
