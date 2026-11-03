@@ -11,21 +11,21 @@ Tampilan hitam-putih, sudut siku, bahasa Indonesia.
 
 | Jenis | Menu |
 |---|---|
-| **Liga** | Aset · Dividen · Modal · Match Fee (+ pemasukan lain) · Registrasi · RAB · RAB Actual |
-| **Sekolah Bola** | Pemasukan (siswa + pembayaran) · Pengeluaran · Aset · Modal · Dividen |
+| **Liga** | Aset · Dividen · Modal · Match Fee (+ pemasukan lain) · Registrasi · RAB Budget · RAB Actual |
+| **Sekolah Bola** | Pemasukan (siswa + pembayaran) · Pengeluaran · Laporan Keuangan · Aset · Modal · Dividen |
 
-Setiap unit punya **pemilik** (boleh lebih dari dua) dengan persentase dividen masing-masing; Owner mengubah persentasenya di menu Dividen. Baris **RAB** yang sudah disimpan tidak bisa diubah, dan baris/pengeluaran bertanda **Aset** otomatis masuk ke menu Aset. Setiap unit juga punya halaman **Ringkasan** dengan angka dan grafik.
+Setiap unit punya **pemilik** (boleh lebih dari dua) dengan persentase dividen masing-masing; Owner mengubah persentasenya di menu Dividen. Baris **RAB Budget** yang sudah disimpan tidak bisa diubah, dan baris/pengeluaran bertanda **Aset** otomatis masuk ke menu Aset. Setiap unit juga punya halaman **Ringkasan** dengan angka dan grafik.
 
 ## Peran
 
 | Peran | Bisa |
 |---|---|
-| **Owner** | Melihat dan mengisi semua unit · membuat unit dan akun · menghapus data · jejak audit · **Ringkasan Owner** (dividen terakumulasi vs target Rp 3 M, penjelasan Liga dan Sekolah Bola dipisah, filter per unit) |
+| **Owner** | Melihat dan mengisi semua unit · membuat unit dan akun · menghapus data · jejak audit · **Ringkasan Owner** (dividen terakumulasi vs target Rp 3 M, akumulasi modal dan aset, penjelasan Liga dan Sekolah Bola dipisah, filter per unit) |
 | **Admin Unit Bisnis** | Hanya melihat dan menginput data unitnya sendiri. Tidak bisa menghapus. |
 
 ## Rumus
 
-- **Dividen Liga** = RAB − (uang modal + uang masuk registrasi + uang masuk match fee)
+- **Dividen Liga** = (uang modal + uang masuk registrasi + uang masuk match fee) − RAB Actual
 - **Dividen Sekolah Bola (per bulan)** = pemasukan − pengeluaran (**sisa saldo**), dihitung per bulan lalu dijumlahkan
 - **Bagian tiap pemilik** = dividen unit × persentase pemilik itu
 - **Akumulasi Owner** = dividen semua unit Liga + dividen semua unit Sekolah Bola, dibandingkan dengan target `DIVIDEND_TARGET` (Rp 3.000.000.000, di `lib/finance/config.ts`)
@@ -43,6 +43,7 @@ npm run db:migrate
 OWNER_EMAIL=anda@contoh.com OWNER_PASSWORD='min-8-karakter' npm run db:seed:owner
 npm run db:seed:demo            # opsional: dua unit contoh (Liga dan Sekolah Bola)
 npm run db:import:excel         # opsional: unit Liga dari dua file Excel contoh (dengan foto bukti), lihat docs/finance.md
+npm run db:import:ganador       # opsional: unit Sekolah Bola SB-GANADOR dari "LAPORAN KEUANGAN & DATABASE SSB GANADOR.xlsx" (dua sheet)
 npm run dev                     # http://localhost:3000
 ```
 

@@ -193,7 +193,7 @@ export default async function ActualBudgetPage({ params }: { params: Promise<{ c
                           <td className="sticky left-0 z-10 bg-white px-3 py-2 text-xs tabular-nums text-ink-muted">{letter(li)}</td>
                           <td className="sticky left-12 z-10 min-w-56 bg-white px-3 py-2">
                             <CostDetail line={detail} costs={costsOf(l.key)} ctx={formCtx} canInput={canInput} canDelete={canDelete} />
-                            {l.source === "extra" && <span className="ml-2 align-middle text-[10px] uppercase tracking-wider text-ink-muted">{t("Di luar RAB")}</span>}
+                            {l.source === "extra" && <span className="ml-2 align-middle text-[10px] uppercase tracking-wider text-ink-muted">{t("Di luar RAB Budget")}</span>}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums text-ink-secondary">
                             {hasBudget ? fmt.number(l.budget) : "—"}
@@ -292,7 +292,7 @@ export default async function ActualBudgetPage({ params }: { params: Promise<{ c
       <PageHeader
         eyebrow={unit.name}
         title={t("RAB Actual")}
-        description={t("Biaya yang benar-benar keluar dibandingkan dengan anggaran RAB, dikelompokkan per minggu.")}
+        description={t("Biaya yang benar-benar keluar dibandingkan dengan anggaran RAB Budget, dikelompokkan per minggu.")}
         actions={
           canInput && (
             <>
@@ -306,16 +306,16 @@ export default async function ActualBudgetPage({ params }: { params: Promise<{ c
       <GuideCard
         id="rab-actual"
         title={t("Cara membaca halaman RAB Actual")}
-        intro={t("Keterangan biaya dan budgetnya diambil dari menu RAB. Setiap kali uang benar-benar keluar, catat biaya actualnya dengan tanggal dan bukti pembayaran; angkanya otomatis masuk ke kolom minggu sesuai tanggalnya dan dijumlahkan per minggu. Biaya mingguan dan biaya bulanan ada di dua bagian terpisah, lalu dijumlahkan di bawahnya.")}
+        intro={t("Keterangan biaya dan budgetnya diambil dari menu RAB Budget. Setiap kali uang benar-benar keluar, catat biaya actualnya dengan tanggal dan bukti pembayaran; angkanya otomatis masuk ke kolom minggu sesuai tanggalnya dan dijumlahkan per minggu. Biaya mingguan dan biaya bulanan ada di dua bagian terpisah, lalu dijumlahkan di bawahnya.")}
         terms={[
-          { term: t("Budget"), text: t("Nilai baris di RAB: untuk biaya mingguan itu per minggu, untuk biaya bulanan itu totalnya. Budget program = budget mingguan × jumlah minggu.") },
+          { term: t("Budget"), text: t("Nilai baris di RAB Budget: untuk biaya mingguan itu per minggu, untuk biaya bulanan itu totalnya. Budget program = budget mingguan × jumlah minggu.") },
           { term: t("Week"), text: t("Minggu program. Minggu 1 dimulai pada tanggal mulai program; biaya masuk ke minggu tempat tanggal bayarnya jatuh.") },
           { term: t("Total"), text: t("Jumlah seluruh biaya actual pada baris itu.") },
           { term: t("Sisa"), text: t("Budget seluruh program dikurangi total actual. Bertanda ▲ bila sudah melebihi budget.") },
           { term: t("Selisih"), text: t("Actual satu minggu dikurangi budget mingguan. ▲ = lebih besar dari budget, ▼ = lebih hemat.") },
           { term: t("Klik keterangan"), text: t("Membuka rincian: tanggal bayar, jumlah, bukti, dan catatan setiap biaya.") },
         ]}
-        tip={canInput ? t("Biaya yang tidak ada di RAB? Klik “Tambah keterangan biaya”, pilih mingguan atau bulanan, lalu catat biaya actualnya.") : undefined}
+        tip={canInput ? t("Biaya yang tidak ada di RAB Budget? Klik “Tambah keterangan biaya”, pilih mingguan atau bulanan, lalu catat biaya actualnya.") : undefined}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
@@ -382,11 +382,11 @@ export default async function ActualBudgetPage({ params }: { params: Promise<{ c
           <CardContent>
             <EmptyState
               icon={ClipboardList}
-              title={t("Belum ada RAB")}
-              description={t("Keterangan biaya dan budget diambil dari RAB. Isi RAB lebih dulu, atau tambahkan keterangan biaya di sini.")}
+              title={t("Belum ada RAB Budget")}
+              description={t("Keterangan biaya dan budget diambil dari RAB Budget. Isi RAB Budget lebih dulu, atau tambahkan keterangan biaya di sini.")}
               action={
                 <Link href={menuHref(unit.code, "rab")} className="border border-black bg-black px-4 py-2 text-sm font-semibold text-white">
-                  {t("Buka RAB")}
+                  {t("Buka RAB Budget")}
                 </Link>
               }
             />

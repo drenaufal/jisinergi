@@ -51,10 +51,10 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
 
   const lines: FormulaLine[] = ligaFigures
     ? [
-        { label: t("RAB (estimasi OPEX)"), value: fmt.rupiah(ligaFigures.dividend.budget), href: link("rab"), hint: t("Biaya mingguan × lama program + biaya bulanan") },
-        { op: "−", label: t("Uang modal"), value: fmt.rupiah(ligaFigures.dividend.capital), href: link("modal") },
-        { op: "−", label: t("Uang masuk registrasi"), value: fmt.rupiah(ligaFigures.dividend.registration), href: link("registrasi"), hint: t("DP + pelunasan yang sudah diterima") },
-        { op: "−", label: t("Uang masuk match fee"), value: fmt.rupiah(ligaFigures.dividend.matchFee), href: link("match-fee") },
+        { label: t("Uang modal"), value: fmt.rupiah(ligaFigures.dividend.capital), href: link("modal") },
+        { op: "+", label: t("Uang masuk registrasi"), value: fmt.rupiah(ligaFigures.dividend.registration), href: link("registrasi"), hint: t("DP + pelunasan yang sudah diterima") },
+        { op: "+", label: t("Uang masuk match fee"), value: fmt.rupiah(ligaFigures.dividend.matchFee), href: link("match-fee") },
+        { op: "−", label: t("RAB Actual"), value: fmt.rupiah(ligaFigures.dividend.actual), href: link("rab-actual"), hint: t("Semua biaya yang benar-benar keluar, di dalam maupun di luar RAB Budget") },
       ]
     : [
         { label: t("Total pemasukan"), value: fmt.rupiah(schoolTotals?.income.total ?? 0), href: link("pemasukan"), hint: t("Registrasi + iuran bulanan") },
@@ -75,7 +75,7 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
         title={t("Cara membaca halaman Dividen")}
         intro={
           isLiga
-            ? t("Bagian atas menghitung dividen unit ini: RAB dikurangi uang modal, uang masuk registrasi, dan uang masuk match fee. Angkanya diambil otomatis dari menu lain. Di bawahnya, dividen itu dibagi ke para pemilik unit sesuai persentase masing-masing.")
+            ? t("Bagian atas menghitung dividen unit ini: uang modal ditambah uang masuk registrasi dan match fee, dikurangi RAB Actual (biaya yang benar-benar keluar). Angkanya diambil otomatis dari menu lain. Di bawahnya, dividen itu dibagi ke para pemilik unit sesuai persentase masing-masing.")
             : t("Bagian atas menghitung dividen unit ini: pemasukan dikurangi pengeluaran (sisa saldo). Angkanya diambil otomatis dari menu Pemasukan dan Pengeluaran. Di bawahnya, dividen itu dibagi ke para pemilik unit sesuai persentase masing-masing.")
         }
         terms={[
@@ -89,21 +89,21 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
       <Formula
         className="mb-4"
         title={isLiga ? t("Perhitungan dividen — Liga") : t("Perhitungan dividen — Sekolah Bola")}
-        formula={isLiga ? t("Dividen = RAB − (Uang modal + Uang masuk registrasi + Uang masuk match fee)") : t("Dividen = Pemasukan − Pengeluaran (sisa saldo)")}
+        formula={isLiga ? t("Dividen = (Uang modal + Uang masuk registrasi + Uang masuk match fee) − RAB Actual") : t("Dividen = Pemasukan − Pengeluaran (sisa saldo)")}
         lines={lines}
         resultLabel={t("Dividen (rumus)")}
         result={fmt.rupiah(dividend)}
         note={
           dividend < 0
             ? isLiga
-              ? t("Hasil negatif: uang modal, registrasi, dan match fee bersama-sama sudah melebihi RAB. Bagian tiap pemilik juga negatif.")
+              ? t("Hasil negatif: RAB Actual sudah melebihi uang modal, registrasi, dan match fee bersama-sama. Bagian tiap pemilik juga negatif.")
               : t("Hasil negatif: pengeluaran lebih besar dari pemasukan. Bagian tiap pemilik juga negatif.")
             : t("Hasil ini ikut dijumlahkan ke akumulasi dividen Owner.")
         }
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label={t("Dividen (rumus)")} value={fmt.rupiahCompact(dividend)} full={fmt.rupiah(dividend)} icon={<Calculator className="size-4" />} block="red" hint={isLiga ? t("RAB − (modal + registrasi + match fee)") : t("Pemasukan − pengeluaran")} />
+        <Kpi label={t("Dividen (rumus)")} value={fmt.rupiahCompact(dividend)} full={fmt.rupiah(dividend)} icon={<Calculator className="size-4" />} block="red" hint={isLiga ? t("(modal + registrasi + match fee) − RAB Actual") : t("Pemasukan − pengeluaran")} />
         <Kpi label={t("Jumlah pemilik")} value={fmt.number(owners.length)} icon={<Users className="size-4" />} block="blue" hint={owners.length ? owners.map((o) => o.name).join(", ") : t("Belum diatur")} />
         <Kpi
           label={t("Pemilik terbesar")}

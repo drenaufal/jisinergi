@@ -15,10 +15,11 @@ Unit bisnis ada dua jenis, dengan menu berbeda (`lib/finance/unit-types.ts` adal
 | | Modal | uang yang disetor pemodal, sudah/belum kembali |
 | | Match Fee | uang masuk per klub per minggu (laga × tarif), per kelompok umur bila ada; di bawahnya **Pemasukan lain** (sewa stand, tiket parkir) per minggu |
 | | Registrasi | uang masuk per klub (dan kelompok umur): biaya, DP, pelunasan, bukti transfer |
-| | RAB | rencana anggaran biaya (mingguan × lama program + bulanan); baris yang disimpan **tidak bisa diubah** |
+| | RAB Budget | rencana anggaran biaya (mingguan × lama program + bulanan); baris yang disimpan **tidak bisa diubah** |
 | | RAB Actual | biaya yang benar-benar keluar, per keterangan biaya dan per minggu; bagian mingguan dan bulanan terpisah |
 | **Sekolah Bola** | Pemasukan | daftar siswa + pembayaran (registrasi, iuran bulanan) |
 | | Pengeluaran | laporan pengeluaran sekolah, ditandai Aset / Non aset |
+| | Laporan Keuangan | uang masuk dan keluar dalam satu daftar seperti lembar “Laporan Keuangan” di Excel: saldo awal, total masuk, total keluar, sisa saldo (hanya baca) |
 | | Aset | peralatan dan sarana (juga terisi otomatis dari pengeluaran bertanda Aset) |
 | | Modal | uang yang disetor pemilik |
 | | Dividen | sisa saldo dan pembagian ke pemilik dalam persen |
@@ -43,24 +44,29 @@ bisa disimpan di jenis unit yang salah (ditolak di server, bukan hanya disembuny
 
 | Angka | Rumus |
 |---|---|
-| **Dividen Liga** | RAB − (uang modal + uang masuk registrasi + uang masuk match fee) |
+| **Dividen Liga** | (uang modal + uang masuk registrasi + uang masuk match fee) − **RAB Actual** |
 | **Dividen Sekolah Bola** = **sisa saldo** | pemasukan − pengeluaran, **per bulan**; akumulasi = jumlah semua bulan |
 | **Akumulasi dividen Owner** | Σ dividen unit Liga + Σ dividen unit Sekolah Bola |
 | **Progres target** | akumulasi ÷ Rp 3.000.000.000 (akumulasi negatif dihitung 0%; bisa melebihi 100%) |
+| **Akumulasi modal Owner** | Σ modal semua unit, Liga dan Sekolah Bola (tampil di Ringkasan Owner, dengan tabel modal per unit) |
 | **Akumulasi aset Owner** | Σ aset semua unit, Liga dan Sekolah Bola |
+| **Sisa saldo Laporan Keuangan** (Sekolah Bola) | saldo awal (modal) + total masuk − total keluar |
 
 Rincian:
 
-- *RAB* = biaya mingguan × `programWeeks` unit + biaya bulanan (dihitung sekali). *Uang modal* = semua modal yang disetor.
-  *Registrasi* = DP + pelunasan yang sudah **diterima**. *Match fee* = laga × tarif per laga.
+- *RAB Actual* = jumlah semua biaya actual yang tercatat di menu RAB Actual, termasuk baris di luar RAB Budget. *Uang modal* = semua
+  modal yang disetor. *Registrasi* = DP + pelunasan yang sudah **diterima**. *Match fee* = laga × tarif per laga.
+  *RAB Budget* (estimasi OPEX = biaya mingguan × `programWeeks` unit + biaya bulanan) tetap tampil di menunya, tetapi **tidak lagi
+  dipakai di rumus dividen**.
 - Sekolah Bola memakai dasar kas: pembayaran dihitung di bulan **tanggal dibayar**, pengeluaran di bulan **tanggal pengeluaran**.
   Bulan yang hanya punya pengeluaran menghasilkan sisa saldo negatif. **Diskon tidak mengurangi pemasukan** — pemasukan adalah
   uang yang benar-benar diterima; diskon hanya dicatat sebagai informasi.
-- **Modal Sekolah Bola tidak mengubah sisa saldo/dividen** (rumus dari spesifikasi hanya pemasukan − pengeluaran); modal dan
-  aset ditampilkan sendiri.
-- Hasil Dividen Liga bisa **negatif** bila modal + registrasi + match fee melebihi RAB.
+- **Modal Sekolah Bola tidak mengubah dividen** (rumus dari spesifikasi hanya pemasukan − pengeluaran); modal dan aset
+  ditampilkan sendiri. Hanya **Sisa Saldo di Laporan Keuangan** yang dimulai dari saldo awal, seperti lembar Excel-nya — halaman itu
+  mencantumkan perbedaan ini.
+- Hasil Dividen Liga bisa **negatif** bila RAB Actual melebihi modal + registrasi + match fee.
 
-## 4. RAB dan aset
+## 4. RAB Budget dan aset
 
 - Baris RAB yang sudah disimpan **tidak bisa diubah lagi** (tidak ada tombol ubah; server menolaknya). Menambah baris
   tetap bisa. Hanya Owner yang bisa menghapus baris, dan tidak bisa bila baris itu sudah punya biaya actual.
@@ -72,6 +78,8 @@ Rincian:
   menghapus aset itu.
 
 ## 5. RAB Actual (Liga)
+
+RAB Actual adalah pengurang di rumus dividen Liga: totalnya (semua biaya actual) muncul sebagai baris “RAB Actual” di Dividen, Ringkasan unit, dan Ringkasan Owner.
 
 Halaman seperti lembar Excel “Weekly / Monthly Forecasting dan Actual”: baris = keterangan biaya, kolom = budget, Week 1…n, Total, Sisa.
 Biaya **mingguan** dan **bulanan** ada di dua bagian terpisah (nomor kategori dan total masing-masing), dengan
@@ -108,7 +116,9 @@ Formulir Excel punya satu baris per anak dengan kolom: Nama Anak, Tgl Bergabung,
 Uang/Bukti/Diskon Pembayaran Bulanan, No Punggung, Nama Panggilan, Tanggal Lahir. Di aplikasi data itu dipecah menjadi dua
 tabel supaya iuran bulanan bisa dicatat setiap bulan:
 
-- `fin_students` — identitas anak (nama, nama panggilan, tgl bergabung, **tgl lahir (kolom sendiri di tab Siswa)**, no punggung)
+- `fin_students` — identitas anak (nama, nama panggilan, tgl bergabung, **tgl lahir (kolom sendiri di tab Siswa)**, no punggung) dan,
+  dari sheet DATABASE SSB Ganador: **NIK** (nomor induk siswa, mis. GDJ001), tempat lahir, no telepon orang tua, ukuran jersey dan
+  tipe ukuran. Semuanya opsional.
 - `fin_student_payments` — satu baris per pembayaran: jenis (`registration` / `monthly`), tanggal, uang, diskon,
   bulan yang tercakup (`YYYY-MM`), bukti.
 
@@ -126,8 +136,22 @@ semua pembayaran, bisa difilter per jenis.
 
 ## 7. Pengeluaran Sekolah Bola
 
-Tabel `fin_expenses`: tanggal, kategori, keterangan, nominal, **Aset/Non aset**, bukti, catatan. **Kolom ini dibuat generik**
-karena file “LAPORAN PENGELUARAN SEKOLAH BOLA” belum tersedia saat dibangun — sesuaikan setelah melihat kolom aslinya.
+Tabel `fin_expenses`: tanggal, kategori, keterangan, nominal, **Aset/Non aset**, bukti, catatan, dan untuk baris gaji **absen**
+(hari hadir) serta **gaji satuan** (gaji per hari; opsional, hanya informasi — nominal tetap yang dibayarkan). **Kolom ini dibuat
+generik** karena file “LAPORAN PENGELUARAN SEKOLAH BOLA” ternyata berisi data Liga; sheet “Laporan Keuangan” SSB Ganador adalah contoh
+pertama pengeluaran sekolah yang sesungguhnya.
+
+## 7b. Laporan Keuangan (Sekolah Bola)
+
+Halaman hanya-baca `/u/<kode>/laporan-keuangan` yang menampilkan lembar “LAPORAN KEUANGAN” seperti di Excel: judul, **Saldo Awal**,
+**Total Masuk / Total Keluar / Sisa Saldo**, lalu tabel *No · Date · Note · Absen · Gaji Satuan · Cash In · Cash Out*.
+
+- Semuanya dibaca dari menu lain, tidak ada yang diketik di sini: Cash In = pembayaran siswa (Pemasukan; Note = nama siswa),
+  Cash Out = Pengeluaran, Saldo Awal = total Modal unit.
+- Urutan: tanggal terlama dulu; baris pada hari yang sama mengikuti urutan input. Nomor dihitung ulang dari urutan itu, jadi bisa
+  berbeda dari kolom No di Excel (Excel menaruh gaji bulan April–Mei di bawah baris Agustus–September).
+- Sisa Saldo = Saldo Awal + Total Masuk − Total Keluar. Ini **bukan** angka Dividen: dividen Sekolah Bola tidak memasukkan modal.
+  Logikanya ada di `financialReport` (`lib/finance/calc.ts`).
 
 ## 8. Peran dan akses
 
@@ -168,6 +192,23 @@ bertanggal hari pertama minggunya (minggu 1 = 2 Okt 2026 untuk `LIGA-RAB`, 10 Ok
 bukti). Registrasi yang hanya mencatat total dibayar dibagi: dua bukti → DP separuh biaya + sisanya pelunasan, satu bukti →
 satu tahap. File “LAPORAN PENGELUARAN SEKOLAH BOLA” sebenarnya berisi data Liga, bukan siswa/pengeluaran sekolah.
 
+**Impor SSB Ganador** — `npm run db:import:ganador` memuat “LAPORAN KEUANGAN & DATABASE SSB GANADOR.xlsx” (dua sheet) sebagai satu unit
+Sekolah Bola `SB-GANADOR`:
+
+| Sheet / kolom | Masuk ke |
+|---|---|
+| LAPORAN KEUANGAN · Saldo Awal | **Modal** (satu baris, pemodal “Saldo awal” — Excel tidak menyebut nama; ganti bila perlu) |
+| LAPORAN KEUANGAN · Cash In | **Pemasukan**: pembayaran siswa (registrasi atau iuran bulanan), tanggal sesuai Date |
+| LAPORAN KEUANGAN · Cash Out, absen, gaji satuan | **Pengeluaran** (kategori dibaca dari keterangan: Gaji / Sewa lapangan / Perlengkapan / Operasional; semua Non aset) |
+| DATABASE · identitas siswa | **Siswa** (NIK, nama, panggilan, tempat/tgl lahir, telepon orang tua, ukuran jersey) |
+| DATABASE · Registrasi − Jersey = Total | pembayaran registrasi senilai Total; uang jersey tidak dihitung sebagai pemasukan (rinciannya di catatan pembayaran) |
+
+Kedua sheet menceritakan uang yang sama dari dua sisi, jadi importer **mencocokkannya**: setiap Cash In harus punya sel bulan yang sama
+di DATABASE (nama, bulan, nominal) dan sebaliknya, lalu semua total yang tertulis di sheet (Total Masuk, Total Keluar, Sisa Saldo, Grand
+Total per siswa dan per bulan) harus sama dengan hasil bacaan. Bila ada yang berbeda, **tidak ada yang ditulis**. Pilihan: `--file`,
+`--dry-run`, `--reset`, `--remove`. Hal yang perlu dicek manusia dicetak sebagai peringatan (siswa tanpa tanggal bergabung, tahun
+bergabung yang mungkin salah ketik, ejaan nama yang berbeda).
+
 Hapus data demo dengan `npm run db:seed:demo -- --remove` sebelum memakai data sungguhan. Untuk memuat ulang data demo
 Sekolah Bola dengan aturan terbaru (tanpa jersey, aset dari pengeluaran): `npm run db:seed:demo -- --reset`.
 
@@ -180,6 +221,6 @@ Sekolah Bola dengan aturan terbaru (tanpa jersey, aset dari pengeluaran): `npm r
 
 ## 11. Belum ada / ide lanjutan
 
-Unduh Excel sesuai format formulir · impor dari Excel · tombol hapus unit di aplikasi · target dividen yang bisa diubah dari
+Unduh Excel sesuai format formulir · tombol hapus unit di aplikasi · target dividen yang bisa diubah dari
 layar (saat ini konstanta `DIVIDEND_TARGET`) · pengingat iuran belum bayar · grafik dividen per bulan di Ringkasan Owner ·
 nilai aset dari RAB mengikuti biaya actual (saat ini mengikuti budget RAB) · hapus tabel lama `fin_dividends`.

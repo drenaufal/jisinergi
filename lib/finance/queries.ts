@@ -108,15 +108,16 @@ export async function loginCountsByUnit() {
 /* ── Datasets for the summary pages ─────────────────────────────────── */
 
 export async function ligaDataset(unitId: string, programWeeks: number): Promise<UnitDataset> {
-  const [assets, capital, registrations, matchFees, otherIncome, budget] = await Promise.all([
+  const [assets, capital, registrations, matchFees, otherIncome, budget, actualCosts] = await Promise.all([
     listAssets(unitId),
     listCapital(unitId),
     listRegistrations(unitId),
     listMatchFees(unitId),
     listOtherIncome(unitId),
     listBudgetItems(unitId),
+    listActualCosts(unitId),
   ]);
-  return { programWeeks, assets, capital, registrations, matchFees, otherIncome, budget };
+  return { programWeeks, assets, capital, registrations, matchFees, otherIncome, budget, actualCosts };
 }
 
 export async function schoolDataset(unitId: string) {
@@ -136,20 +137,21 @@ const empty = <T,>() => Promise.resolve([] as T[]);
 
 /**
  * Figures of many units at once, for the owner dashboard. Each table is read a single time and split per
- * unit in memory, so ten units cost nine queries rather than ninety.
+ * unit in memory, so ten units cost ten queries rather than a hundred.
  */
 export async function getAllUnitFigures(units: readonly UnitRef[]) {
   const ligaIds = units.filter((u) => u.type === "liga").map((u) => u.id);
   const schoolIds = units.filter((u) => u.type === "sekolah_bola").map((u) => u.id);
 
   const allIds = units.map((u) => u.id);
-  const [assets, capital, registrations, matchFees, otherIncome, budget, students, payments, expenses] = await Promise.all([
+  const [assets, capital, registrations, matchFees, otherIncome, budget, actualCosts, students, payments, expenses] = await Promise.all([
     allIds.length ? db.select().from(finAssets).where(inArray(finAssets.businessUnitId, allIds)) : empty<typeof finAssets.$inferSelect>(),
     allIds.length ? db.select().from(finCapital).where(inArray(finCapital.businessUnitId, allIds)) : empty<typeof finCapital.$inferSelect>(),
     ligaIds.length ? db.select().from(finRegistrations).where(inArray(finRegistrations.businessUnitId, ligaIds)) : empty<typeof finRegistrations.$inferSelect>(),
     ligaIds.length ? db.select().from(finMatchFees).where(inArray(finMatchFees.businessUnitId, ligaIds)) : empty<typeof finMatchFees.$inferSelect>(),
     ligaIds.length ? db.select().from(finOtherIncome).where(inArray(finOtherIncome.businessUnitId, ligaIds)) : empty<typeof finOtherIncome.$inferSelect>(),
     ligaIds.length ? db.select().from(finBudgetItems).where(inArray(finBudgetItems.businessUnitId, ligaIds)) : empty<typeof finBudgetItems.$inferSelect>(),
+    ligaIds.length ? db.select().from(finActualCosts).where(inArray(finActualCosts.businessUnitId, ligaIds)) : empty<typeof finActualCosts.$inferSelect>(),
     schoolIds.length ? db.select().from(finStudents).where(inArray(finStudents.businessUnitId, schoolIds)) : empty<typeof finStudents.$inferSelect>(),
     schoolIds.length
       ? db.select().from(finStudentPayments).where(and(inArray(finStudentPayments.businessUnitId, schoolIds), ne(finStudentPayments.kind, "jersey")))
@@ -173,6 +175,7 @@ export async function getAllUnitFigures(units: readonly UnitRef[]) {
         matchFees: mine(matchFees, u.id),
         otherIncome: mine(otherIncome, u.id),
         budget: mine(budget, u.id),
+        actualCosts: mine(actualCosts, u.id),
       });
       out.set(u.id, { type: "liga", figures, dividend: figures.dividend.value });
     } else {

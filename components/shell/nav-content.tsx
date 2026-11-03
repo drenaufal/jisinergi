@@ -10,6 +10,7 @@ import {
   Calculator,
   ChevronDown,
   ClipboardList,
+  FileSpreadsheet,
   HandCoins,
   Landmark,
   LayoutDashboard,
@@ -40,6 +41,7 @@ const ICONS: Record<string, LucideIcon> = {
   "rab-actual": Wallet,
   pemasukan: ArrowDownToLine,
   pengeluaran: ArrowUpFromLine,
+  "laporan-keuangan": FileSpreadsheet,
 };
 
 export type ShellUser = { name: string; email: string; role: Role; title?: string | null };

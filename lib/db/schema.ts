@@ -369,6 +369,13 @@ export const finStudents = mysqlTable(
     birthDate: date("birth_date"),
     joinedOn: date("joined_on").notNull(),
     jerseyNumber: int("jersey_number"),
+    /** The school's own student number ("GDJ001"): the NIK column of the DATABASE sheet. */
+    nik: varchar("nik", { length: 40 }),
+    birthPlace: varchar("birth_place", { length: 80 }),
+    parentPhone: varchar("parent_phone", { length: 40 }),
+    /** The size on the jersey order ("M", "L", "XXL") and the cut it belongs to ("Size Anak"). */
+    jerseySize: varchar("jersey_size", { length: 20 }),
+    sizeType: varchar("size_type", { length: 40 }),
     note: text("note"),
   },
   (t) => [index("fin_students_unit_idx").on(t.businessUnitId, t.name)],
@@ -410,6 +417,9 @@ export const finExpenses = mysqlTable(
     category: varchar("category", { length: 120 }).notNull(),
     name: varchar("name", { length: 200 }).notNull(),
     amount: rupiah("amount").notNull(),
+    /** Salary rows: days attended ("absen") and the pay per day ("gaji satuan"), as the report sheet shows them. Informational: `amount` is what was paid. */
+    attendanceDays: int("attendance_days"),
+    dailyRate: rupiah("daily_rate"),
     /** An asset expense also creates a row in ASET (see finAssets.expenseId). */
     isAsset: boolean("is_asset").notNull().default(false),
     proofUrl: text("proof_url"),
