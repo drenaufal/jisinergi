@@ -1,21 +1,23 @@
 import type { Metadata } from "next";
-import { Award, Calculator, Percent, Users } from "lucide-react";
+import { Award, Calculator, HandCoins, Percent, Users, Wallet } from "lucide-react";
 import { can } from "@/lib/auth/rbac";
 import { loadUnitPage } from "@/lib/finance/access";
 import { ligaDataset, listOwners, schoolDataset } from "@/lib/finance/queries";
 import { schoolFigures, unitFigures } from "@/lib/finance/calc";
-import { BP_TOTAL, bpToField, splitByShares } from "@/lib/finance/ownership";
+import { BP_TOTAL, bpToField, ownerPayouts } from "@/lib/finance/ownership";
 import { menuHref } from "@/lib/finance/unit-types";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState, Progress } from "@/components/ui/misc";
+import { EmptyState } from "@/components/ui/misc";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { BlockTitle, ColumnHead, Notice } from "@/components/finance/bits";
+import { BlockTitle, Notice } from "@/components/finance/bits";
 import { CHART_COLORS, RankBars, ShareDonut } from "@/components/finance/charts";
 import { Formula, type FormulaLine } from "@/components/finance/formula";
 import { GuideCard } from "@/components/finance/guide-card";
 import { Kpi } from "@/components/finance/kpi";
 import { getI18n } from "@/lib/i18n/server";
+import { DividendTable } from "./dividend-table";
+import { LeagueFinishedButton } from "./league-button";
 import { OwnersDialog } from "./owners-dialog";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -42,12 +44,17 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
   const schoolTotals = school ? schoolFigures({ students: school.students.length, payments: school.payments, expenses: school.expenses }) : null;
 
   const dividend = ligaFigures ? ligaFigures.dividend.value : (schoolTotals?.dividend ?? 0);
-  const amounts = splitByShares(dividend, owners.map((o) => o.shareBp));
-  const rows = owners.map((o, i) => ({ owner: o, amount: amounts[i] }));
+  // A Liga only has a dividend once its event is over; until then the figures are an estimate (not takeable, not counted for the Owner).
+  const generated = !isLiga || !!unit.leagueFinishedOn;
+  const payouts = ownerPayouts(dividend, owners);
+  const rows = owners.map((o, i) => ({ owner: o, amount: payouts[i].share }));
   const totalBp = owners.reduce((sum, o) => sum + o.shareBp, 0);
   const balanced = totalBp === BP_TOTAL;
   const biggest = rows.reduce<(typeof rows)[number] | null>((top, r) => (!top || r.owner.shareBp > top.owner.shareBp ? r : top), null);
   const editorRows = owners.map((o) => ({ name: o.name, percent: bpToField(o.shareBp) }));
+  const takenTotal = owners.reduce((sum, o) => sum + o.takenAmount, 0);
+  const finalTotal = dividend - takenTotal;
+  const tableRows = owners.map((o, i) => ({ id: o.id, name: o.name, shareBp: o.shareBp, share: payouts[i].share, taken: o.takenAmount }));
 
   const lines: FormulaLine[] = ligaFigures
     ? [
@@ -83,28 +90,62 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
           { term: t("Pemilik"), text: t("Orang yang memiliki unit ini. Diisi saat unit dibuat.") },
           { term: t("Persentase"), text: t("Bagian setiap pemilik dari dividen. Totalnya harus 100%. Hanya Owner yang dapat mengubahnya.") },
           { term: t("Bagian dividen"), text: t("Dividen dikali persentase pemilik itu. Dibulatkan ke rupiah penuh dan selalu berjumlah sama dengan dividen.") },
+          { term: t("Ambil"), text: isLiga ? t("Uang bagian dividen yang sudah diambil pemilik. Dividen Liga hanya bisa diambil seluruhnya, dan baru setelah event liga selesai.") : t("Uang bagian dividen yang sudah diambil pemilik. Bisa diisi berapa saja, atau centang “Ambil semua”. Hanya Owner yang dapat mengisinya.") },
+          { term: t("Dividen final"), text: t("Bagian dividen dikurangi yang sudah diambil, yaitu dividen yang belum diambil. Angka inilah yang dijumlahkan di Ringkasan Owner.") },
         ]}
       />
+
+      {isLiga && (
+        <section className="mb-4 flex flex-wrap items-center justify-between gap-3 border-2 border-black bg-white px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">{t("Event liga")}</p>
+            <p className="mt-0.5 text-sm font-semibold text-ink">
+              {unit.leagueFinishedOn
+                ? t("Selesai pada {date} — dividen sudah terbentuk", { date: fmt.date(unit.leagueFinishedOn, { day: "numeric", month: "long", year: "numeric" }) })
+                : t("Belum selesai — dividen belum terbentuk")}
+            </p>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              {unit.leagueFinishedOn
+                ? t("Pemilik bisa mengambil bagiannya, dan dividen ini dihitung di Ringkasan Owner (sebesar yang belum diambil).")
+                : canEdit
+                  ? t("Angka di bawah masih perkiraan: belum bisa diambil dan belum dihitung di Ringkasan Owner. Tandai selesai bila event liga sudah berakhir.")
+                  : t("Angka di bawah masih perkiraan. Owner menandai event selesai setelah liga berakhir; sejak itu dividen bisa diambil.")}
+            </p>
+          </div>
+          {canEdit && <LeagueFinishedButton unitId={unit.id} finished={!!unit.leagueFinishedOn} />}
+        </section>
+      )}
 
       <Formula
         className="mb-4"
         title={isLiga ? t("Perhitungan dividen — Liga") : t("Perhitungan dividen — Sekolah Bola")}
         formula={isLiga ? t("Dividen = (Uang modal + Uang masuk registrasi + Uang masuk match fee) − RAB Actual") : t("Dividen = Pemasukan − Pengeluaran (sisa saldo)")}
         lines={lines}
-        resultLabel={t("Dividen (rumus)")}
+        resultLabel={generated ? t("Dividen (rumus)") : t("Dividen (perkiraan)")}
         result={fmt.rupiah(dividend)}
         note={
           dividend < 0
             ? isLiga
               ? t("Hasil negatif: RAB Actual sudah melebihi uang modal, registrasi, dan match fee bersama-sama. Bagian tiap pemilik juga negatif.")
               : t("Hasil negatif: pengeluaran lebih besar dari pemasukan. Bagian tiap pemilik juga negatif.")
-            : t("Hasil ini ikut dijumlahkan ke akumulasi dividen Owner.")
+            : generated
+              ? t("Dari hasil ini, yang belum diambil pemilik (dividen final) ikut dijumlahkan ke akumulasi dividen Owner.")
+              : t("Belum dijumlahkan ke akumulasi dividen Owner sampai event liga ditandai selesai.")
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label={t("Dividen (rumus)")} value={fmt.rupiahCompact(dividend)} full={fmt.rupiah(dividend)} icon={<Calculator className="size-4" />} block="red" hint={isLiga ? t("(modal + registrasi + match fee) − RAB Actual") : t("Pemasukan − pengeluaran")} />
-        <Kpi label={t("Jumlah pemilik")} value={fmt.number(owners.length)} icon={<Users className="size-4" />} block="blue" hint={owners.length ? owners.map((o) => o.name).join(", ") : t("Belum diatur")} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+        <Kpi label={generated ? t("Dividen (rumus)") : t("Dividen (perkiraan)")} value={fmt.rupiahCompact(dividend)} full={fmt.rupiah(dividend)} icon={<Calculator className="size-4" />} block="red" hint={isLiga ? t("(modal + registrasi + match fee) − RAB Actual") : t("Pemasukan − pengeluaran")} />
+        <Kpi label={t("Sudah diambil")} value={fmt.rupiahCompact(takenTotal)} full={fmt.rupiah(takenTotal)} icon={<Wallet className="size-4" />} block="blue" hint={t("Oleh semua pemilik")} />
+        <Kpi
+          label={t("Dividen final")}
+          value={generated ? fmt.rupiahCompact(finalTotal) : "—"}
+          full={generated ? fmt.rupiah(finalTotal) : undefined}
+          icon={<HandCoins className="size-4" />}
+          block="night"
+          hint={generated ? t("Belum diambil — dihitung di Ringkasan Owner") : t("Terbentuk setelah event liga selesai")}
+        />
+        <Kpi label={t("Jumlah pemilik")} value={fmt.number(owners.length)} icon={<Users className="size-4" />} block="white" hint={owners.length ? owners.map((o) => o.name).join(", ") : t("Belum diatur")} />
         <Kpi
           label={t("Pemilik terbesar")}
           value={biggest ? pct(biggest.owner.shareBp) : "—"}
@@ -171,38 +212,14 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
               description={canEdit ? t("Klik “Ubah pembagian” untuk mengisi pemilik dan persentase dividennya.") : t("Owner belum mengisi kepemilikan unit ini.")}
             />
           ) : (
-            <Table>
-              <THead>
-                <TR className="hover:bg-transparent">
-                  <TH className="w-10">{t("No")}</TH>
-                  <TH><ColumnHead label={t("Pemilik")} hint={t("Nama")} /></TH>
-                  <TH className="min-w-48"><ColumnHead label={t("Persentase")} hint={t("Bagian dari dividen")} /></TH>
-                  <TH className="text-right"><ColumnHead label={t("Bagian dividen")} hint={t("Dividen × persentase")} align="right" /></TH>
-                </TR>
-              </THead>
-              <TBody>
-                {rows.map(({ owner, amount }, i) => (
-                  <TR key={owner.id}>
-                    <TD className="tabular-nums text-ink-muted">{i + 1}</TD>
-                    <TD className="font-medium text-ink">{owner.name}</TD>
-                    <TD>
-                      <div className="flex items-center gap-2.5">
-                        <Progress value={(owner.shareBp / BP_TOTAL) * 100} className="w-28" />
-                        <span className="w-14 text-right text-xs font-semibold tabular-nums text-ink">{pct(owner.shareBp)}</span>
-                      </div>
-                    </TD>
-                    <TD className="text-right font-medium tabular-nums text-ink">{fmt.rupiah(amount)}</TD>
-                  </TR>
-                ))}
-              </TBody>
-              <tfoot>
-                <tr className="border-t-2 border-ink bg-surface-2">
-                  <td colSpan={2} className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-ink">{t("Total")}</td>
-                  <td className="px-3 py-3 text-xs font-bold tabular-nums text-ink">{pct(totalBp)}</td>
-                  <td className="px-3 py-3 text-right text-sm font-bold tabular-nums text-ink">{fmt.rupiah(amounts.reduce((a, b) => a + b, 0))}</td>
-                </tr>
-              </tfoot>
-            </Table>
+            <DividendTable
+              key={tableRows.map((r) => `${r.id}:${r.share}:${r.taken}`).join("|")}
+              unitId={unit.id}
+              rows={tableRows}
+              editable={canEdit && generated}
+              allOrNothing={isLiga}
+              generated={generated}
+            />
           )}
         </CardContent>
       </Card>

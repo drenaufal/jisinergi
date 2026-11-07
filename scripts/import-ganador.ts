@@ -4,9 +4,9 @@ config({ path: ".env.local", quiet: true });
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readWorkbook } from "./lib/xlsx-reader";
+import { readWorkbook } from "@/lib/finance/excel/xlsx-reader";
 import { parseGanador } from "./lib/excel-ganador";
-import { norm } from "./lib/excel-types";
+import { norm } from "@/lib/finance/excel/excel-types";
 
 /**
  * Loads "LAPORAN KEUANGAN & DATABASE SSB GANADOR.xlsx" into the database as one Sekolah Bola unit:

@@ -1,6 +1,6 @@
-import type { Workbook } from "./xlsx-reader";
-import { sheetReader } from "./xlsx-reader";
-import { norm, tidy } from "./excel-types";
+import type { Workbook } from "@/lib/finance/excel/xlsx-reader";
+import { sheetReader } from "@/lib/finance/excel/xlsx-reader";
+import { norm, tidy } from "@/lib/finance/excel/excel-types";
 
 /**
  * Reads "LAPORAN KEUANGAN & DATABASE SSB GANADOR.xlsx": a football school's own workbook with two sheets.

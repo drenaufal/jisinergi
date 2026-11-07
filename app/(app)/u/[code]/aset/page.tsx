@@ -67,13 +67,13 @@ export default async function AssetsPage({ params }: { params: Promise<{ code: s
       <GuideCard
         id="aset"
         title={t("Cara membaca halaman Aset")}
-        intro={t("Aset adalah barang yang dimiliki unit bisnis, misalnya dispenser, sound system, atau meja lipat. Setiap pembelian dicatat sekali: kapan dibeli, apa, berapa harganya, dan struk buktinya. Baris RAB atau pengeluaran yang ditandai Aset masuk ke sini otomatis.")}
+        intro={t("Aset adalah barang yang dimiliki unit bisnis, misalnya dispenser, sound system, atau meja lipat. Setiap pembelian dicatat sekali: kapan dibeli, apa, berapa harganya, dan struk buktinya. Aset terisi otomatis dari biaya di RAB Actual untuk baris RAB bertanda Aset (setelah barangnya benar-benar dibeli), dan dari pengeluaran Sekolah Bola yang ditandai Aset.")}
         terms={[
           { term: t("Tanggal"), text: t("Hari barang dibeli.") },
           { term: t("Sarana pertandingan"), text: t("Nama barang yang dibeli.") },
           { term: t("Nominal"), text: t("Harga yang dibayarkan, dalam Rupiah.") },
           { term: t("Bukti"), text: t("Foto atau scan struk. “Belum ada bukti” berarti struknya belum diunggah.") },
-          { term: t("Otomatis"), text: t("Baris bertanda “Dari RAB” atau “Dari pengeluaran” dibuat otomatis dan mengikuti sumbernya, jadi tidak dapat diubah di sini.") },
+          { term: t("Otomatis"), text: t("Baris bertanda “Dari RAB Actual” atau “Dari pengeluaran” dibuat otomatis dan mengikuti sumbernya, jadi tidak dapat diubah di sini. Baris RAB Budget yang ditandai Aset belum menjadi aset sampai ada biaya actualnya.") },
         ]}
         tip={canInput ? t("Klik ikon pensil untuk memperbaiki sebuah baris, atau chip hijau “Lihat bukti” untuk membuka struknya.") : t("Klik chip hijau “Lihat bukti” untuk membuka struk pembelian.")}
       />
@@ -166,7 +166,7 @@ export default async function AssetsPage({ params }: { params: Promise<{ code: s
                     <TD className="whitespace-nowrap tabular-nums">{fmt.date(r.purchasedOn)}</TD>
                     <TD>
                       <span className="font-medium text-ink">{r.name}</span>
-                      {r.budgetItemId && <Badge className="ml-2 align-middle" tone="info">{t("Dari RAB")}</Badge>}
+                      {r.actualCostId && <Badge className="ml-2 align-middle" tone="info">{t("Dari RAB Actual")}</Badge>}
                       {r.expenseId && <Badge className="ml-2 align-middle" tone="info">{t("Dari pengeluaran")}</Badge>}
                       {r.note && <span className="block text-[11px] text-ink-muted">{r.note}</span>}
                     </TD>
@@ -175,8 +175,8 @@ export default async function AssetsPage({ params }: { params: Promise<{ code: s
                     {(canInput || canDelete) && (
                       <TD>
                         <div className="flex justify-end gap-0.5">
-                          {canInput && !r.budgetItemId && !r.expenseId && <EditRecordButton kind="asset" record={record(r)} ctx={form} />}
-                          {canDelete && !r.budgetItemId && !r.expenseId && <DeleteRecordButton kind="asset" id={r.id} name={r.name} />}
+                          {canInput && !r.actualCostId && !r.expenseId && <EditRecordButton kind="asset" record={record(r)} ctx={form} />}
+                          {canDelete && !r.actualCostId && !r.expenseId && <DeleteRecordButton kind="asset" id={r.id} name={r.name} />}
                         </div>
                       </TD>
                     )}

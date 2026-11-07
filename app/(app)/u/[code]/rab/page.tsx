@@ -1,11 +1,9 @@
-import { Fragment } from "react";
 import type { Metadata } from "next";
 import { Calculator, CalendarClock, CalendarRange, Repeat } from "lucide-react";
 import { loadUnitPage } from "@/lib/finance/access";
 import { listBudgetItems } from "@/lib/finance/queries";
 import { budgetByCategory, budgetLineTotal, budgetTotals, groupBudget, sum, type BudgetGroup } from "@/lib/finance/calc";
 import { PageHeader } from "@/components/app/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/misc";
 import { BlockTitle } from "@/components/finance/bits";
@@ -13,7 +11,8 @@ import { RankBars, ShareDonut } from "@/components/finance/charts";
 import { GuideCard } from "@/components/finance/guide-card";
 import { Kpi } from "@/components/finance/kpi";
 import { getI18n } from "@/lib/i18n/server";
-import { AddRecordButton, DeleteRecordButton } from "../forms";
+import { AddRecordButton } from "../forms";
+import { BudgetTable, type BudgetFooterRow } from "./budget-table";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getI18n()).t("RAB Budget") };
@@ -53,95 +52,27 @@ export default async function BudgetPage({ params }: { params: Promise<{ code: s
   const top = ranked.slice(0, 8);
   const rest = sum(ranked.slice(8), ([, v]) => v);
 
+  /** One part of the RAB (weekly or monthly): the categories fold, the lines are cost rows. */
   const budgetTable = ({ groups, title, hint, footer }: {
     groups: BudgetGroup<(typeof rows)[number]>[];
     title: string;
     hint: string;
-    footer: { label: string; value: number; strong?: boolean }[];
-  }) => {
-    return (
-      <div className="space-y-3">
-        <BlockTitle title={title} hint={hint} />
-        <div className="w-full overflow-x-auto rounded-xl border border-line">
-          <table className="w-full min-w-[34rem] border-collapse text-sm">
-            <thead className="bg-surface-2 text-[10.5px] font-semibold uppercase tracking-wider text-ink-muted">
-              <tr>
-                <th className="w-14 px-3 py-2.5 text-left">{t("No")}</th>
-                <th className="px-3 py-2.5 text-left">
-                  {t("Keterangan biaya")}
-                  <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal">{t("Apa yang dibayar")}</span>
-                </th>
-                <th className="w-20 px-3 py-2.5 text-right">
-                  {t("Jumlah")}
-                  <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal">{t("Berapa banyak")}</span>
-                </th>
-                <th className="w-32 px-3 py-2.5 text-right">
-                  {t("Harga satuan")}
-                  <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal">{t("Per 1 jumlah")}</span>
-                </th>
-                <th className="w-36 px-3 py-2.5 text-right">
-                  {t("Total")}
-                  <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal">{t("Jumlah × harga")}</span>
-                </th>
-                {actions && <th className="w-24 px-2"><span className="sr-only">{t("Aksi")}</span></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map((g, gi) => groupRows(g, gi + 1))}
-            </tbody>
-            <tfoot>
-              {footer.map((f, i) => (
-                <tr key={i} className={`border-t ${f.strong ? "border-t-2 border-line bg-surface-2" : "border-line-soft"}`}>
-                  <td colSpan={4} className={`px-3 py-2.5 text-right text-xs uppercase tracking-wider ${f.strong ? "font-bold text-ink" : "font-semibold text-ink-secondary"}`}>
-                    {f.label}
-                  </td>
-                  <td className={`px-3 py-2.5 text-right tabular-nums ${f.strong ? "text-sm font-bold text-ink" : "font-semibold text-ink-secondary"}`}>{fmt.rupiah(f.value)}</td>
-                  {actions && <td />}
-                </tr>
-              ))}
-            </tfoot>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  const groupRows = (group: BudgetGroup<(typeof rows)[number]>, index: number) => {
-    return (
-      <Fragment key={group.category}>
-        <tr className="border-t border-line bg-surface-2/70">
-          <td className="px-3 py-2 text-xs font-bold tabular-nums text-ink-secondary">{index}</td>
-          <td colSpan={3} className="px-3 py-2 text-[13px] font-semibold text-ink">{group.category}</td>
-          <td className="px-3 py-2 text-right text-[13px] font-bold tabular-nums text-ink">{fmt.rupiah(group.subtotal)}</td>
-          {actions && <td />}
-        </tr>
-        {group.items.map((item, ii) => {
-          const lineTotal = budgetLineTotal(item);
-          return (
-            <tr key={item.id} className="border-t border-line-soft transition-colors hover:bg-surface-2/50">
-              <td className="px-3 py-2 text-xs tabular-nums text-ink-muted">{index}.{ii + 1}</td>
-              <td className="px-3 py-2 text-ink-secondary">
-                {item.name}
-                {item.isAsset && <Badge className="ml-2 align-middle" tone="info">{t("Aset")}</Badge>}
-                {lineTotal === 0 && <Badge className="ml-2 align-middle" tone="neutral">{t("Belum dianggarkan")}</Badge>}
-                {item.note && <span className="block text-[11px] text-ink-muted">{item.note}</span>}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums text-ink-secondary">{fmt.number(item.quantity)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-ink-secondary">{fmt.rupiah(item.unitPrice)}</td>
-              <td className="px-3 py-2 text-right font-medium tabular-nums text-ink">{lineTotal === 0 ? "—" : fmt.rupiah(lineTotal)}</td>
-              {actions && (
-                <td className="px-2 py-1">
-                  <div className="flex justify-end gap-0.5">
-                    <DeleteRecordButton kind="budget" id={item.id} name={item.name} />
-                  </div>
-                </td>
-              )}
-            </tr>
-          );
-        })}
-      </Fragment>
-    );
-  };
+    footer: BudgetFooterRow[];
+  }) => (
+    <div className="space-y-3">
+      <BlockTitle title={title} hint={hint} />
+      <BudgetTable
+        part={title}
+        groups={groups.map((g) => ({
+          category: g.category,
+          subtotal: g.subtotal,
+          items: g.items.map((item) => ({ id: item.id, name: item.name, isAsset: item.isAsset, note: item.note, quantity: item.quantity, unitPrice: item.unitPrice, total: budgetLineTotal(item) })),
+        }))}
+        footer={footer}
+        canDelete={actions}
+      />
+    </div>
+  );
 
   return (
     <div>
@@ -159,11 +90,11 @@ export default async function BudgetPage({ params }: { params: Promise<{ code: s
         terms={[
           { term: t("Mingguan"), text: t("Biaya yang keluar setiap minggu pertandingan (sewa lapangan, honor wasit, konsumsi). Dikalikan jumlah minggu program.") },
           { term: t("Bulanan"), text: t("Biaya yang dikeluarkan satu kali (peralatan, hadiah, seragam, publikasi). Dihitung sekali dalam total.") },
-          { term: t("Jumlah × Harga satuan"), text: t("Setiap baris = berapa banyak × harga per satu. Kolom Total sudah menghitungnya.") },
+          { term: t("Jumlah Satuan × Harga satuan"), text: t("Setiap baris = jumlah satuan (berapa banyak) × harga per satuan. Kolom Total sudah menghitungnya.") },
           { term: t("Estimasi OPEX"), text: t("OPEX = biaya operasional. Estimasi = total mingguan seluruh program ditambah total bulanan.") },
-          { term: t("Aset / Non aset"), text: t("Baris Aset adalah barang yang dimiliki unit; nilainya otomatis tercatat di menu Aset. Non aset hanya menjadi anggaran.") },
+          { term: t("Aset / Non aset"), text: t("Baris Aset adalah barang yang akan dimiliki unit; pembelian sebenarnya (biaya actual di RAB Actual) otomatis tercatat di menu Aset. Non aset hanya menjadi anggaran.") },
         ]}
-        tip={t("Baris RAB Budget yang sudah disimpan tidak dapat diubah lagi, jadi periksa dulu sebelum menyimpan. Baris bertanda “Aset” otomatis masuk ke menu Aset. Biaya yang benar-benar keluar dicatat di menu RAB Actual.")}
+        tip={t("Baris RAB Budget yang sudah disimpan tidak dapat diubah lagi, jadi periksa dulu sebelum menyimpan. Baris bertanda “Aset” masuk ke menu Aset begitu barangnya benar-benar dibeli, yaitu saat biaya actualnya dicatat di menu RAB Actual. Klik nama kategori untuk melipat atau membukanya.")}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

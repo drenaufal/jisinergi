@@ -9,6 +9,7 @@ import { scopeOf } from "@/lib/finance/access";
 import { FinanceRuleError, deleteFinanceRecord, markCapitalReturned, saveFinanceRecord } from "@/lib/finance/records";
 import { bpToField, ownersSchema, readOwnerRows } from "@/lib/finance/ownership";
 import { UnitRuleError, replaceUnitOwners } from "@/lib/finance/units";
+import { saveDividendTaken, setLeagueFinished } from "@/lib/finance/dividend";
 import { auditText, recordAudit } from "@/lib/audit";
 
 /* Every action re-checks who is asking: the page that rendered the button is not trusted. */
@@ -72,6 +73,66 @@ export async function markReturned(id: string): Promise<DeleteResult> {
     await markCapitalReturned({ t, actor: user, scope, id });
   } catch (error) {
     if (error instanceof FinanceRuleError) return { error: error.message };
+    throw error;
+  }
+  refresh();
+  return undefined;
+}
+
+/**
+ * Owner only: how much of their dividend share each owner has taken. The form posts one `ownerId` / `taken` pair per owner;
+ * for a Liga the amount is either 0 or the whole share (the page offers a checkbox, not a field).
+ */
+export async function saveDividendTakenAction(unitId: string, _prev: FormState, formData: FormData): Promise<FormState> {
+  const t = await getT();
+  const actor = await actionUser("units:manage");
+  const ids = formData.getAll("ownerId").map(String);
+  const amounts = formData.getAll("taken").map((v) => String(v).replace(/\D/g, ""));
+  const posted = new Map(ids.map((id, i) => [id, amounts[i] === "" || amounts[i] === undefined ? 0 : Number(amounts[i])]));
+
+  try {
+    const { unit, changes } = await saveDividendTaken(t, unitId, posted);
+    for (const c of changes) {
+      await recordAudit({
+        actorId: actor.id,
+        actorName: actor.name,
+        actorRole: actor.role,
+        action: "finance.dividend.taken",
+        entityType: "fin_unit_owner",
+        entityId: c.id,
+        summary: auditText("Dividen {unit}: {owner} mengambil Rp {to} (sebelumnya Rp {from})", {
+          unit: unit.name,
+          owner: c.name,
+          to: c.to.toLocaleString("id-ID"),
+          from: c.from.toLocaleString("id-ID"),
+        }),
+      });
+    }
+  } catch (error) {
+    if (error instanceof UnitRuleError) return formError(t, error.fieldErrors, formData, error.message);
+    throw error;
+  }
+  refresh();
+  return undefined;
+}
+
+/** Owner only: marks the league event finished (the Liga dividend now exists and can be taken) or opens it again. */
+export async function setLeagueFinishedAction(unitId: string, finished: boolean): Promise<DeleteResult> {
+  const t = await getT();
+  const actor = await actionUser("units:manage");
+  try {
+    const { unit } = await setLeagueFinished(t, unitId, finished);
+    await recordAudit({
+      actorId: actor.id,
+      actorName: actor.name,
+      actorRole: actor.role,
+      action: finished ? "finance.league.finished" : "finance.league.reopened",
+      entityType: "business_unit",
+      entityId: unitId,
+      summary: auditText(finished ? "Event liga {unit} ditandai selesai" : "Event liga {unit} dibuka kembali", { unit: unit.name }),
+    });
+  } catch (error) {
+    if (error instanceof UnitRuleError) return { error: error.message };
     throw error;
   }
   refresh();

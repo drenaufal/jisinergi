@@ -16,7 +16,7 @@ async function main() {
   const target = new URL(url);
   console.log(`Database: ${target.hostname}:${target.port || "3306"}${target.pathname}`);
 
-  const { and, eq, like, or } = await import("drizzle-orm");
+  const { and, eq, isNotNull, like, or } = await import("drizzle-orm");
   const { db } = await import("@/lib/db");
   const s = await import("@/lib/db/schema");
   const { createT } = await import("@/lib/i18n/translate");
@@ -95,7 +95,7 @@ async function main() {
       return parsed.data;
     };
 
-    /* ── RAB: asset lines fill ASET, saved lines are final ── */
+    /* ── RAB: asset lines only fill ASET once something is bought (RAB Actual), saved lines are final ── */
     const rab = (raw: Record<string, string>) => parseKind("budget", { quantity: "1", note: "", ...raw });
     const dispenser = await save(liga, "budget", rab({ period: "monthly", category: "Peralatan", name: "Dispenser", unitPrice: "1000000", assetType: "asset" }));
     const weeklyAsset = await save(liga, "budget", rab({ period: "weekly", category: "Peralatan", name: "Sewa genset", quantity: "2", unitPrice: "150000", assetType: "asset" }));
@@ -104,12 +104,9 @@ async function main() {
     const byName = (name: string) => budgetRows.find((b) => b.name === name)!;
     eq2(budgetRows.map((b) => [b.name, b.isAsset]).sort(), [["Dispenser", true], ["Lakban", false], ["Sewa genset", true]], "RAB: the Aset / Non aset choice is stored per line");
     const ligaAssets = await db.select().from(s.finAssets).where(eq(s.finAssets.businessUnitId, liga.id));
-    eq2(ligaAssets.map((a) => [a.name, a.amount, a.budgetItemId === byName(a.name).id]).sort(), [["Dispenser", 1000000, true], ["Sewa genset", 3000000, true]], "RAB: asset lines become assets (a weekly line × the 10 program weeks); a non-asset line does not");
+    eq2(ligaAssets.length, 0, "RAB: an asset line makes no asset by itself — only a purchase (RAB Actual cost) does");
     ok(dispenser.created && weeklyAsset.created && lakban.created, "RAB: three lines saved");
     await rejects(save(liga, "budget", rab({ period: "monthly", category: "Peralatan", name: "Dispenser", unitPrice: "2000000" }), byName("Dispenser").id), "RAB: a saved line cannot be edited", /tidak dapat diubah/);
-    const linked = ligaAssets.find((a) => a.name === "Dispenser")!;
-    await rejects(save(liga, "asset", parseKind("asset", { purchasedOn: "2026-10-05", name: "Dispenser", amount: "5", proofUrl: "", note: "" }), linked.id), "ASET: an asset made from the RAB cannot be edited", /otomatis/);
-    await rejects(deleteFinanceRecord({ t, actor, scope: owner, kind: "asset", id: linked.id }), "ASET: an asset made from the RAB cannot be deleted on its own", /otomatis/);
     const manual = await save(liga, "asset", parseKind("asset", { purchasedOn: "2026-10-05", name: "Bola", amount: "400000", proofUrl: "", note: "" }));
     ok(manual.created, "ASET: a hand-typed asset still works");
     const manualRow = (await db.select().from(s.finAssets).where(and(eq(s.finAssets.businessUnitId, liga.id), eq(s.finAssets.name, "Bola"))))[0];
@@ -126,7 +123,16 @@ async function main() {
     await save(liga, "actualcost", cost(`b:${byName("Dispenser").id}`, "1.050.000", "2026-10-06"));
     await save(liga, "actualcost", cost(`b:${byName("Dispenser").id}`, "50.000", "2026-10-13"));
     await save(liga, "actualcost", cost(`a:${extra.id}`, "100.000", "2026-10-13"));
-    const costs = await listActualCosts(liga.id);
+    await save(liga, "actualcost", cost(`b:${byName("Lakban").id}`, "20.000", "2026-10-14"));
+    const costs = (await listActualCosts(liga.id)).filter((c) => c.amount !== 20000);
+    const lakbanCost = (await listActualCosts(liga.id)).find((c) => c.amount === 20000)!;
+    const costAssets = () => db.select().from(s.finAssets).where(and(eq(s.finAssets.businessUnitId, liga.id), isNotNull(s.finAssets.actualCostId)));
+    eq2((await costAssets()).map((a) => [a.name, a.amount, a.purchasedOn]).sort(), [["Dispenser", 1050000, "2026-10-06"], ["Dispenser", 50000, "2026-10-13"]], "RAB Actual: a cost on an asset line becomes an asset (what was paid, on the day it was paid); costs on other lines do not");
+    await deleteFinanceRecord({ t, actor, scope: owner, kind: "actualcost", id: lakbanCost.id });
+    const linked = (await costAssets()).find((a) => a.amount === 1050000)!;
+    ok(linked.actualCostId === costs[0].id, "ASET: the asset points at the cost it came from");
+    await rejects(save(liga, "asset", parseKind("asset", { purchasedOn: "2026-10-05", name: "Dispenser", amount: "5", proofUrl: "", note: "" }), linked.id), "ASET: an asset made from RAB Actual cannot be edited", /otomatis/);
+    await rejects(deleteFinanceRecord({ t, actor, scope: owner, kind: "asset", id: linked.id }), "ASET: an asset made from RAB Actual cannot be deleted on its own", /otomatis/);
     eq2(costs.map((c) => [c.amount, c.budgetItemId === byName("Dispenser").id ? "RAB" : "extra", c.spentOn]), [[1050000, "RAB", "2026-10-06"], [50000, "RAB", "2026-10-13"], [100000, "extra", "2026-10-13"]], "RAB Actual: costs are saved on a RAB line or an extra line, oldest first");
     await rejects(save(liga, "actualcost", cost(`b:${crypto.randomUUID()}`, "1", "2026-10-06")), "RAB Actual: a cost for a line that does not exist is refused", /tidak ditemukan/);
     const otherItem = await save(other, "budget", rab({ period: "monthly", category: "X", name: "Barang unit lain", unitPrice: "10", assetType: "non_asset" }));
@@ -139,12 +145,14 @@ async function main() {
     const first = costs[0];
     await save(liga, "actualcost", { ...cost(`b:${byName("Dispenser").id}`, "1.100.000", "2026-10-07") }, first.id);
     eq2((await listActualCosts(liga.id))[0].amount, 1100000, "RAB Actual: a cost can be corrected");
+    eq2((await costAssets()).map((a) => [a.amount, a.purchasedOn]).sort(), [[1100000, "2026-10-07"], [50000, "2026-10-13"]], "RAB Actual: correcting a cost corrects its asset");
     await deleteFinanceRecord({ t, actor, scope: owner, kind: "actualcost", id: first.id });
     eq2((await listActualCosts(liga.id)).length, 2, "RAB Actual: a cost can be deleted");
+    eq2((await costAssets()).map((a) => a.amount), [50000], "RAB Actual: deleting a cost deletes its asset");
     await deleteFinanceRecord({ t, actor, scope: owner, kind: "budget", id: byName("Lakban").id });
     ok((await db.select().from(s.finBudgetItems).where(eq(s.finBudgetItems.id, byName("Lakban").id))).length === 0, "RAB: a line without costs can be deleted");
     await deleteFinanceRecord({ t, actor, scope: owner, kind: "budget", id: byName("Sewa genset").id });
-    ok((await db.select().from(s.finAssets).where(eq(s.finAssets.budgetItemId, byName("Sewa genset").id))).length === 0, "RAB: deleting an asset line removes the asset it made");
+    ok((await db.select().from(s.finBudgetItems).where(eq(s.finBudgetItems.id, byName("Sewa genset").id))).length === 0, "RAB: an asset line without costs can be deleted");
     await rejects(save(school, "actualcost", cost(`b:${byName("Dispenser").id}`, "1", "2026-10-06")), "RAB Actual: a Sekolah Bola has no RAB Actual", /tidak tersedia/);
     await rejects(save(school, "budget", rab({ period: "monthly", category: "X", name: "Y", unitPrice: "1", assetType: "non_asset" })), "RAB: a Sekolah Bola has no RAB", /tidak tersedia/);
 
@@ -248,18 +256,68 @@ async function main() {
 
     /* ── Dashboard figures and who may touch what ── */
     const figures = await getAllUnitFigures([
-      { id: liga.id, type: "liga", programWeeks: 10 },
-      { id: school.id, type: "sekolah_bola", programWeeks: 10 },
+      { id: liga.id, type: "liga", programWeeks: 10, leagueFinishedOn: null },
+      { id: school.id, type: "sekolah_bola", programWeeks: 10, leagueFinishedOn: null },
     ]);
     const schoolFigures = figures.get(school.id)!;
     const ligaFigures = figures.get(liga.id)!;
     if (schoolFigures.type !== "sekolah_bola" || ligaFigures.type !== "liga") throw new Error("unexpected figures");
     eq2([schoolFigures.figures.assets, schoolFigures.figures.income.total], [{ total: 300000, count: 1 }, 500000 + 200000 + 200000], "Dashboard: a school's assets are counted, and income has registration + monthly but no jersey");
-    eq2(ligaFigures.figures.assets.total, 1000000 + 450000, "Dashboard: a Liga's assets include the one made from the RAB");
+    eq2(ligaFigures.figures.assets.total, 450000 + 50000, "Dashboard: a Liga's assets are the hand-typed one plus the purchase made through RAB Actual");
     const costsTotal = (await listActualCosts(liga.id)).reduce((total, c) => total + c.amount, 0);
     eq2([ligaFigures.figures.actual.total, ligaFigures.figures.dividend.actual], [costsTotal, costsTotal], "Dashboard: a Liga's RAB Actual is every real cost of the unit");
     eq2(ligaFigures.figures.dividend.value, ligaFigures.figures.dividend.funding - costsTotal, "Dashboard: the Liga dividend is (modal + registrasi + match fee) − RAB Actual");
     eq2([ligaFigures.figures.capital.total, schoolFigures.figures.capital.total], [0, 10000000 + 5000000], "Dashboard: modal is counted for both unit types");
+    /* ── Dividen: the event of a Liga must be finished, owners take their share, the Owner overview counts what is left ── */
+    const { saveDividendTaken, setLeagueFinished, unitDividendValue } = await import("@/lib/finance/dividend");
+    const { dividendFinal, ownerPayouts } = await import("@/lib/finance/ownership");
+    const rejectsUnit = async (promise: Promise<unknown>, label: string, match: RegExp) => {
+      try {
+        await promise;
+        ok(false, `${label} (was accepted)`);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        const fields = e instanceof UnitRuleError ? Object.values(e.fieldErrors).join(" ") : "";
+        ok(e instanceof UnitRuleError && match.test(`${message} ${fields}`), `${label} → “${(fields || message).slice(0, 70)}”`);
+      }
+    };
+    const ligaOwners = await listOwners(liga.id);
+    const ligaDividendNow = await unitDividendValue({ id: liga.id, type: "liga", programWeeks: 10 });
+    ok(ligaDividendNow > 0, "Dividen: the test Liga has a positive dividend to share");
+    eq2([ligaFigures.payout.generated, ligaFigures.payout.final, ligaFigures.payout.dividend], [false, 0, ligaDividendNow], "Dividen: a Liga whose event is not finished has no dividend yet (it counts 0 for the Owner)");
+    await rejectsUnit(saveDividendTaken(t, liga.id, new Map([[ligaOwners[0].id, 1]])), "Dividen: nothing can be taken before the event is finished", /setelah event liga/);
+    await setLeagueFinished(t, liga.id, true);
+    const ligaShare = ownerPayouts(ligaDividendNow, ligaOwners)[0].share;
+    await rejectsUnit(saveDividendTaken(t, liga.id, new Map([[ligaOwners[0].id, ligaShare - 1]])), "Dividen: a Liga dividend can only be taken in full", /seluruhnya/);
+    await rejectsUnit(saveDividendTaken(t, liga.id, new Map([[ligaOwners[0].id, ligaShare + 1]])), "Dividen: more than the share cannot be taken", /Melebihi/);
+    await saveDividendTaken(t, liga.id, new Map([[ligaOwners[0].id, ligaShare]]));
+    const afterTake = (await getAllUnitFigures([{ id: liga.id, type: "liga", programWeeks: 10, leagueFinishedOn: "2026-11-07" }])).get(liga.id)!;
+    eq2([afterTake.payout.generated, afterTake.payout.taken, afterTake.payout.final], [true, ligaShare, ligaDividendNow - ligaShare], "Dividen: once finished, the Owner overview counts the dividend minus what was taken");
+    await rejectsUnit(setLeagueFinished(t, liga.id, false), "Dividen: a league whose dividend was taken cannot be reopened", /sudah diambil/);
+    await replaceUnitOwners(t, liga.id, [{ name: "Pemilik A", shareBp: 5000 }, { name: "Pemilik B", shareBp: 5000 }]);
+    eq2((await listOwners(liga.id)).map((o) => [o.name, o.takenAmount]), [["Pemilik A", ligaShare], ["Pemilik B", 0]], "Dividen: rewriting the owner shares keeps what each owner took");
+    await rejectsUnit(replaceUnitOwners(t, liga.id, [{ name: "Pemilik B", shareBp: 10000 }]), "Dividen: an owner who took money cannot be removed", /sudah mengambil/);
+    // the owner rows are rewritten with new ids whenever the shares are edited, so read them again
+    await saveDividendTaken(t, liga.id, new Map([[(await listOwners(liga.id))[0].id, 0]]));
+    eq2((await listOwners(liga.id)).map((o) => o.takenAmount), [0, 0], "Dividen: a withdrawal can be undone");
+    eq2(dividendFinal(1000, 300).final, 700, "Dividen: dividen final = dividend − taken");
+    eq2(dividendFinal(1000, 0, false).final, 0, "Dividen: not generated counts 0");
+
+    // Sekolah Bola: any amount up to the share
+    await db.insert(s.finStudentPayments).values({ id: crypto.randomUUID(), businessUnitId: school.id, studentId: student.id, kind: "monthly", paidOn: "2027-01-05", amount: 10000000, discount: 0, period: "2027-01" });
+    const schoolOwners = await listOwners(school.id);
+    const schoolDividendNow = await unitDividendValue({ id: school.id, type: "sekolah_bola", programWeeks: 10 });
+    const schoolPayout = ownerPayouts(schoolDividendNow, schoolOwners);
+    ok(schoolDividendNow > 0 && schoolPayout[0].share > 1000000, "Dividen: the test school has a dividend to share");
+    await saveDividendTaken(t, school.id, new Map([[schoolOwners[0].id, 1000000]]));
+    const schoolAfter = (await getAllUnitFigures([{ id: school.id, type: "sekolah_bola", programWeeks: 10, leagueFinishedOn: null }])).get(school.id)!;
+    eq2([schoolAfter.payout.taken, schoolAfter.payout.final], [1000000, schoolDividendNow - 1000000], "Dividen: a school owner can take part of the share");
+    await rejectsUnit(saveDividendTaken(t, school.id, new Map([[schoolOwners[1].id, schoolPayout[1].share + 1]])), "Dividen: a school owner cannot take more than the share", /Melebihi/);
+    await saveDividendTaken(t, school.id, new Map([[schoolOwners[0].id, schoolPayout[0].share], [schoolOwners[1].id, schoolPayout[1].share]]));
+    eq2((await listOwners(school.id)).map((o) => o.takenAmount), [schoolPayout[0].share, schoolPayout[1].share], "Dividen: “ambil semua” takes every share");
+    const schoolEmpty = (await getAllUnitFigures([{ id: school.id, type: "sekolah_bola", programWeeks: 10, leagueFinishedOn: null }])).get(school.id)!;
+    eq2(schoolEmpty.payout.final, 0, "Dividen: when every owner took everything nothing is left for the Owner overview");
+
     const admin = scopeOf({ role: "unit_admin", unitId: school.id });
     const pinned = await save(liga, "asset", parseKind("asset", { purchasedOn: "2026-10-05", name: "Dipaksa", amount: "1", proofUrl: "", note: "" }), null, admin);
     eq2(pinned.unitId, school.id, "Access: a unit admin is pinned to their own unit even when the form names another one");

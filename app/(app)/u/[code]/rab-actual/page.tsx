@@ -1,7 +1,6 @@
-import { Fragment } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Calculator, ClipboardList, Gauge, PiggyBank, Receipt, Wallet } from "lucide-react";
+import { Calculator, ClipboardList, Gauge, PiggyBank, Wallet } from "lucide-react";
 import { loadUnitPage } from "@/lib/finance/access";
 import { listActualCosts, listActualItems, listBudgetItems } from "@/lib/finance/queries";
 import {
@@ -23,17 +22,16 @@ import { ColumnChart, RankBars } from "@/components/finance/charts";
 import { GuideCard } from "@/components/finance/guide-card";
 import { Kpi } from "@/components/finance/kpi";
 import { getI18n } from "@/lib/i18n/server";
-import { cn } from "@/lib/utils";
 import { AddRecordButton } from "../forms";
-import { CostDetail, type DetailCost, type DetailLine } from "./cost-detail";
+import { ActualTable, type ActualLineView, type WeekColumn } from "./actual-table";
+import type { DetailCost } from "./cost-detail";
+import { RabActualUpload } from "./upload-dialog";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getI18n()).t("RAB Actual") };
 }
 export const dynamic = "force-dynamic";
 
-/** "a.", "b.", … then "27.", "28." once the alphabet runs out. */
-const letter = (i: number) => (i < 26 ? `${String.fromCharCode(97 + i)}.` : `${i + 1}.`);
 const todayInApp = () => new Date().toLocaleDateString("sv-SE", { timeZone: APP_TIME_ZONE });
 const costKey = (c: { budgetItemId: string | null; actualItemId: string | null }) => (c.budgetItemId ? `b:${c.budgetItemId}` : `a:${c.actualItemId}`);
 
@@ -81,7 +79,6 @@ export default async function ActualBudgetPage({ params }: { params: Promise<{ c
   const sections = [grid.weekly, grid.monthly];
   const allGroups = sections.flatMap((s) => s.groups);
 
-  const actions = canInput;
   const periodLabel = (p: "weekly" | "monthly") => (p === "weekly" ? t("Per minggu") : t("Sekali"));
   const weekHead = (w: number) => (w >= 1 ? t("Week {n}", { n: w }) : t("Sebelum"));
   const weekDate = (w: number) => (grid.start && w >= 1 ? fmt.date(weekStartDate(grid.start, w), { day: "numeric", month: "short" }) : null);
@@ -125,163 +122,72 @@ export default async function ActualBudgetPage({ params }: { params: Promise<{ c
     .values();
   const rankedList = [...ranked].filter((g) => g.total > 0).sort((a, b) => b.total - a.total);
   const empty = allGroups.length === 0;
-  const diffLabel = (n: number) => (n === 0 ? "0" : `${n > 0 ? "▲" : "▼"} ${fmt.number(Math.abs(n))}`);
 
+  const weekColumns: WeekColumn[] = grid.weeks.map((w) => ({ week: w, head: weekHead(w), date: weekDate(w) }));
   const renderSection = (section: ActualSection, title: string, hint: string) => {
     if (section.groups.length === 0) return null;
     const weekly = section.period === "weekly";
-    const cols = grid.weeks.length + (weekly ? 5 : 4) + (actions ? 1 : 0);
-    const sectionOver = section.totals.remaining < 0;
+    const view = (groupLines: ActualSection["groups"][number]["lines"], category: string): ActualLineView[] =>
+      groupLines.map((l) => {
+        const extra = l.source === "extra" ? extraById.get(l.id) : undefined;
+        return {
+          key: l.key,
+          name: l.name,
+          extra: l.source === "extra",
+          isAsset: l.isAsset,
+          budget: l.budget,
+          programBudget: l.programBudget,
+          byWeek: l.byWeek,
+          total: l.total,
+          remaining: l.remaining,
+          periodLabel: periodLabel(l.period),
+          detail: {
+            key: l.key,
+            extraId: extra?.id ?? null,
+            note: extra?.note ?? null,
+            name: l.name,
+            category,
+            period: l.period,
+            businessUnitId: unit.id,
+            periodLabel: periodLabel(l.period),
+            isAsset: l.isAsset,
+            budget: l.budget,
+            programBudget: l.programBudget,
+            total: l.total,
+            remaining: l.remaining,
+          },
+          costs: costsOf(l.key),
+        };
+      });
     return (
       <Card key={section.period} className="mt-4">
         <CardContent className="space-y-4">
           <BlockTitle title={title} hint={hint} />
-          <div className="w-full overflow-x-auto border border-ink">
-            <table className="w-full min-w-max border-collapse text-sm">
-              <thead className="bg-surface-2 text-[10.5px] font-semibold uppercase tracking-wider text-ink">
-                <tr className="border-b border-ink">
-                  <th className="sticky left-0 z-20 w-12 bg-surface-2 px-3 py-2.5 text-left">{t("No")}</th>
-                  <th className="sticky left-12 z-20 min-w-56 bg-surface-2 px-3 py-2.5 text-left">{t("Keterangan biaya")}</th>
-                  <th className="px-3 py-2.5 text-right">{t("Budget")}</th>
-                  {weekly && <th className="px-3 py-2.5 text-right">{t("Budget program")}</th>}
-                  {grid.weeks.map((w) => (
-                    <th key={w} className="min-w-24 px-3 py-2.5 text-right">
-                      {weekHead(w)}
-                      {weekDate(w) && <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal text-ink-muted">{weekDate(w)}</span>}
-                    </th>
-                  ))}
-                  <th className="px-3 py-2.5 text-right">{t("Total")}</th>
-                  <th className="px-3 py-2.5 text-right">{t("Sisa")}</th>
-                  {actions && <th className="w-12 px-2"><span className="sr-only">{t("Aksi")}</span></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {section.groups.map((g, gi) => (
-                  <Fragment key={g.category}>
-                    <tr className="bg-black text-white">
-                      <td className="sticky left-0 z-10 bg-black px-3 py-2 text-xs font-bold tabular-nums">{gi + 1}</td>
-                      <td className="sticky left-12 z-10 bg-black px-3 py-2 text-[13px] font-semibold">{g.category}</td>
-                      <td className="px-3 py-2 text-right text-[13px] font-semibold tabular-nums">{g.budget > 0 ? fmt.number(g.budget) : "—"}</td>
-                      {weekly && <td className="px-3 py-2 text-right text-[13px] tabular-nums text-white/80">{g.programBudget > 0 ? fmt.number(g.programBudget) : "—"}</td>}
-                      {grid.weeks.map((w) => (
-                        <td key={w} className="px-3 py-2 text-right text-[13px] tabular-nums text-white/90">{g.byWeek[w] ? fmt.number(g.byWeek[w]) : ""}</td>
-                      ))}
-                      <td className="px-3 py-2 text-right text-[13px] font-bold tabular-nums">{fmt.number(g.total)}</td>
-                      <td className="px-3 py-2 text-right text-[13px] font-semibold tabular-nums">{g.programBudget > 0 || g.total > 0 ? fmt.number(g.remaining) : "—"}</td>
-                      {actions && <td />}
-                    </tr>
-                    {g.lines.map((l, li) => {
-                      const extra = l.source === "extra" ? extraById.get(l.id) : undefined;
-                      const detail: DetailLine = {
-                        key: l.key,
-                        extraId: extra?.id ?? null,
-                        note: extra?.note ?? null,
-                        name: l.name,
-                        category: g.category,
-                        period: l.period,
-                        businessUnitId: unit.id,
-                        periodLabel: periodLabel(l.period),
-                        isAsset: l.isAsset,
-                        budget: l.budget,
-                        programBudget: l.programBudget,
-                        total: l.total,
-                        remaining: l.remaining,
-                      };
-                      const hasBudget = l.programBudget > 0;
-                      return (
-                        <tr key={l.key} className="border-t border-line-soft hover:bg-surface-2/60">
-                          <td className="sticky left-0 z-10 bg-white px-3 py-2 text-xs tabular-nums text-ink-muted">{letter(li)}</td>
-                          <td className="sticky left-12 z-10 min-w-56 bg-white px-3 py-2">
-                            <CostDetail line={detail} costs={costsOf(l.key)} ctx={formCtx} canInput={canInput} canDelete={canDelete} />
-                            {l.source === "extra" && <span className="ml-2 align-middle text-[10px] uppercase tracking-wider text-ink-muted">{t("Di luar RAB Budget")}</span>}
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums text-ink-secondary">
-                            {hasBudget ? fmt.number(l.budget) : "—"}
-                            {weekly && hasBudget && <span className="block text-[10px] text-ink-muted">{periodLabel(l.period)}</span>}
-                          </td>
-                          {weekly && <td className="px-3 py-2 text-right tabular-nums text-ink-muted">{hasBudget ? fmt.number(l.programBudget) : "—"}</td>}
-                          {grid.weeks.map((w) => (
-                            <td key={w} className={cn("px-3 py-2 text-right tabular-nums", l.byWeek[w] ? "bg-elevated font-medium text-ink" : "text-ink-muted")}>
-                              {l.byWeek[w] ? fmt.number(l.byWeek[w]) : ""}
-                            </td>
-                          ))}
-                          <td className="px-3 py-2 text-right font-semibold tabular-nums text-ink">{l.total > 0 ? fmt.number(l.total) : "—"}</td>
-                          <td className={cn("px-3 py-2 text-right tabular-nums", l.remaining < 0 ? "font-bold text-ink" : "text-ink-secondary")}>
-                            {hasBudget || l.total > 0 ? `${l.remaining < 0 ? "▲ " : ""}${fmt.number(Math.abs(l.remaining))}` : "—"}
-                          </td>
-                          {actions && (
-                            <td className="px-1 py-1">
-                              <AddRecordButton
-                                kind="actualcost"
-                                ctx={formCtx}
-                                variant="cell"
-                                preset={{ itemRef: l.key }}
-                                label={t("Tambah biaya actual")}
-                                className="grid size-8 place-items-center text-ink-muted transition-colors hover:bg-ink hover:text-white"
-                              >
-                                <Receipt className="size-3.5" />
-                              </AddRecordButton>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </Fragment>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-ink bg-surface-2 text-sm font-bold tabular-nums text-ink">
-                  <td className="sticky left-0 z-10 bg-surface-2" />
-                  <td className="sticky left-12 z-10 bg-surface-2 px-3 py-3 text-xs uppercase tracking-wider">{weekly ? t("Total mingguan") : t("Total bulanan")}</td>
-                  <td className="px-3 py-3 text-right">{section.totals.budget > 0 ? fmt.number(section.totals.budget) : "—"}</td>
-                  {weekly && <td className="px-3 py-3 text-right">{section.totals.programBudget > 0 ? fmt.number(section.totals.programBudget) : "—"}</td>}
-                  {grid.weeks.map((w) => (
-                    <td key={w} className="px-3 py-3 text-right">{section.totals.byWeek[w] ? fmt.number(section.totals.byWeek[w]) : ""}</td>
-                  ))}
-                  <td className="px-3 py-3 text-right">{fmt.number(section.totals.total)}</td>
-                  <td className="px-3 py-3 text-right">{`${sectionOver ? "▲ " : ""}${fmt.number(Math.abs(section.totals.remaining))}`}</td>
-                  {actions && <td />}
-                </tr>
-                {weekly && variance.weeks > 0 && (
-                  <>
-                    <tr className="border-t border-line text-xs tabular-nums text-ink-secondary">
-                      <td className="sticky left-0 z-10 bg-white" />
-                      <td className="sticky left-12 z-10 bg-white px-3 py-2 uppercase tracking-wider">{t("Budget per minggu")}</td>
-                      <td />
-                      <td />
-                      {grid.weeks.map((w) => (
-                        <td key={w} className="px-3 py-2 text-right">{w >= 1 && w <= variance.weeks ? fmt.number(variance.budgetPerWeek) : ""}</td>
-                      ))}
-                      <td className="px-3 py-2 text-right">{fmt.number(variance.budget)}</td>
-                      <td />
-                      {actions && <td />}
-                    </tr>
-                    <tr className="border-t border-line text-xs font-semibold tabular-nums text-ink">
-                      <td className="sticky left-0 z-10 bg-white" />
-                      <td className="sticky left-12 z-10 bg-white px-3 py-2 uppercase tracking-wider">{t("Selisih (actual − budget)")}</td>
-                      <td />
-                      <td />
-                      {grid.weeks.map((w) => (
-                        <td key={w} className="px-3 py-2 text-right">{w >= 1 && w <= variance.weeks ? diffLabel(variance.perWeek[w]) : ""}</td>
-                      ))}
-                      <td className="px-3 py-2 text-right">{diffLabel(variance.difference)}</td>
-                      <td />
-                      {actions && <td />}
-                    </tr>
-                  </>
-                )}
-                <tr>
-                  <td colSpan={cols} className="px-3 py-2 text-[11px] text-ink-muted">
-                    {weekly
-                      ? variance.weeks > 0
-                        ? t("▲ = lebih besar dari budget, ▼ = lebih hemat. Selisih dihitung sampai minggu ke-{n}, minggu terakhir yang sudah berjalan dan punya biaya mingguan.", { n: variance.weeks })
-                        : t("Selisih per minggu muncul begitu ada biaya mingguan di minggu yang sudah berjalan.")
-                      : t("Biaya bulanan dihitung sekali; angkanya tetap dicatat di minggu tempat biaya itu dibayar.")}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          <ActualTable
+            weekly={weekly}
+            groups={section.groups.map((g) => ({
+              category: g.category,
+              budget: g.budget,
+              programBudget: g.programBudget,
+              byWeek: g.byWeek,
+              total: g.total,
+              remaining: g.remaining,
+              lines: view(g.lines, g.category),
+            }))}
+            totals={section.totals}
+            variance={weekly ? variance : null}
+            weeks={weekColumns}
+            ctx={formCtx}
+            canInput={canInput}
+            canDelete={canDelete}
+            note={
+              weekly
+                ? variance.weeks > 0
+                  ? t("▲ = lebih besar dari budget, ▼ = lebih hemat. Selisih dihitung sampai minggu ke-{n}, minggu terakhir yang sudah berjalan dan punya biaya mingguan.", { n: variance.weeks })
+                  : t("Selisih per minggu muncul begitu ada biaya mingguan di minggu yang sudah berjalan.")
+                : t("Biaya bulanan dihitung sekali; angkanya tetap dicatat di minggu tempat biaya itu dibayar.")
+            }
+          />
         </CardContent>
       </Card>
     );
@@ -296,6 +202,7 @@ export default async function ActualBudgetPage({ params }: { params: Promise<{ c
         actions={
           canInput && (
             <>
+              <RabActualUpload unitId={unit.id} unitStartsOn={unit.programStartsOn} />
               <AddRecordButton kind="actualitem" ctx={formCtx} variant="outline" />
               <AddRecordButton kind="actualcost" ctx={formCtx} />
             </>

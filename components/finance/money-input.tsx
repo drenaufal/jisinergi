@@ -17,6 +17,8 @@ export function MoneyInput({
   invalid,
   id,
   onValueChange,
+  value,
+  disabled,
 }: {
   name: string;
   defaultValue?: number | string | null;
@@ -26,14 +28,18 @@ export function MoneyInput({
   id?: string;
   /** Called with the amount (0 when empty) on every keystroke, e.g. to preview a total. */
   onValueChange?: (amount: number) => void;
+  /** Controlled mode: the amount to show (the parent keeps it, e.g. a checkbox that fills it in). */
+  value?: number;
+  disabled?: boolean;
 }) {
   const { fmt } = useI18n();
   const initial = String(defaultValue ?? "").replace(/\D/g, "");
-  const [digits, setDigits] = React.useState(initial);
+  const [typed, setTyped] = React.useState(initial);
+  const digits = value === undefined ? typed : value > 0 ? String(Math.trunc(value)) : "";
   const shown = digits === "" ? "" : fmt.number(Number(digits));
   const change = (raw: string) => {
     const next = raw.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 13);
-    setDigits(next);
+    setTyped(next);
     onValueChange?.(next === "" ? 0 : Number(next));
   };
 
@@ -46,6 +52,7 @@ export function MoneyInput({
         inputMode="numeric"
         autoComplete="off"
         required={required}
+        disabled={disabled}
         placeholder={placeholder}
         value={shown}
         onChange={(e) => change(e.target.value)}

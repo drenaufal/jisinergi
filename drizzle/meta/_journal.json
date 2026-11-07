@@ -29,6 +29,20 @@
       "when": 1793712833593,
       "tag": "0003_student_details_attendance",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1794033518106,
+      "tag": "0004_dividend_taken_logo_asset_actual",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1794033533254,
+      "tag": "0005_drop_asset_budget_item",
+      "breakpoints": true
     }
   ]
 }

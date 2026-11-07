@@ -10,19 +10,23 @@ Unit bisnis ada dua jenis, dengan menu berbeda (`lib/finance/unit-types.ts` adal
 
 | Jenis | Menu | Isi |
 |---|---|---|
-| **Liga** | Aset | pembelian peralatan/sarana (tanggal, nama, nominal, struk) |
-| | Dividen | rumus dividen + pembagian ke pemilik dalam persen |
+| **Liga** | Aset | pembelian peralatan/sarana (tanggal, nama, nominal, struk); terisi otomatis dari biaya RAB Actual pada baris RAB bertanda Aset |
+| | Dividen | rumus dividen + pembagian ke pemilik dalam persen + penanda sudah diambil (baru setelah event liga selesai) |
 | | Modal | uang yang disetor pemodal, sudah/belum kembali |
 | | Match Fee | uang masuk per klub per minggu (laga × tarif), per kelompok umur bila ada; di bawahnya **Pemasukan lain** (sewa stand, tiket parkir) per minggu |
 | | Registrasi | uang masuk per klub (dan kelompok umur): biaya, DP, pelunasan, bukti transfer |
 | | RAB Budget | rencana anggaran biaya (mingguan × lama program + bulanan); baris yang disimpan **tidak bisa diubah** |
-| | RAB Actual | biaya yang benar-benar keluar, per keterangan biaya dan per minggu; bagian mingguan dan bulanan terpisah |
+| | RAB Actual | biaya yang benar-benar keluar, per keterangan biaya dan per minggu; bagian mingguan dan bulanan terpisah; bisa diunggah dari Excel |
 | **Sekolah Bola** | Pemasukan | daftar siswa + pembayaran (registrasi, iuran bulanan) |
 | | Pengeluaran | laporan pengeluaran sekolah, ditandai Aset / Non aset |
 | | Laporan Keuangan | uang masuk dan keluar dalam satu daftar seperti lembar “Laporan Keuangan” di Excel: saldo awal, total masuk, total keluar, sisa saldo (hanya baca) |
 | | Aset | peralatan dan sarana (juga terisi otomatis dari pengeluaran bertanda Aset) |
 | | Modal | uang yang disetor pemilik |
-| | Dividen | sisa saldo dan pembagian ke pemilik dalam persen |
+| | Dividen | sisa saldo, pembagian ke pemilik dalam persen, dan uang yang sudah diambil tiap pemilik |
+
+Setiap unit bisa punya **logo** (diunggah saat unit dibuat atau lewat *Ubah unit*; JPG/PNG/WEBP/GIF, maks 5 MB). Logo tampil di menu samping dan di
+Kelola Unit Bisnis; tanpa logo, yang tampil huruf pertama nama unit. Formulir unit dan semua pop-up lainnya **bisa digulir**: judulnya tetap di atas,
+isinya yang bergulir, dan tombol simpan selalu terlihat di bawah.
 
 Jenis dipilih saat unit dibuat dan **tidak bisa diubah** setelahnya, karena data dan menunya berbeda. Satu jenis data tidak
 bisa disimpan di jenis unit yang salah (ditolak di server, bukan hanya disembunyikan di menu).
@@ -37,6 +41,13 @@ bisa disimpan di jenis unit yang salah (ditolak di server, bukan hanya disembuny
 - Menu **Dividen** (Liga dan Sekolah Bola) menampilkan rumus dividen, lalu tabel pemilik: nama, persentase, bagian dividen.
   **Hanya Owner** yang bisa mengubah persentase (tombol *Ubah pembagian*); yang diubah persentasenya, bukan nominalnya.
   Dividen yang negatif dibagi dengan cara yang sama (kerugian).
+- **Pengambilan dividen.** Tabel pemilik punya kolom **Ambil** (uang bagian dividen yang sudah diambil) dan **Dividen final** (= bagian dividen − diambil, yaitu
+  yang belum diambil). Hanya **Owner** yang bisa mengisinya (sama seperti persentase). Jumlah yang diambil disimpan per pemilik
+  (`fin_unit_owners.taken_amount`); mengubah persentase pemilik tidak menghapusnya, dan pemilik yang sudah mengambil uang tidak bisa dihapus.
+  - **Sekolah Bola**: kolom Ambil diisi manual (0 sampai bagian dividen pemilik itu) dan ada kotak centang **Ambil semua** per pemilik serta di judul kolom.
+  - **Liga**: hanya **semua atau tidak** — satu kotak centang “Sudah diambil” per pemilik, dan tanda “Sudah diambil” tampil di samping namanya.
+- **Dividen Liga baru terbentuk saat event liga selesai.** Owner menekan *Tandai liga selesai* di halaman Dividen (`business_units.league_finished_on`).
+  Sebelum itu angka dividen hanya perkiraan: tidak bisa diambil dan dihitung **0** di Ringkasan Owner. *Buka kembali* hanya bisa selama belum ada yang mengambil.
 - Pencatatan dividen lama berbasis nominal (`fin_dividends`) sudah tidak dipakai. Migrasi `0001` menyalinnya menjadi
   pemilik + persentase; tabelnya dibiarkan (tidak dihapus) sampai datanya tidak dibutuhkan lagi.
 
@@ -46,8 +57,9 @@ bisa disimpan di jenis unit yang salah (ditolak di server, bukan hanya disembuny
 |---|---|
 | **Dividen Liga** | (uang modal + uang masuk registrasi + uang masuk match fee) − **RAB Actual** |
 | **Dividen Sekolah Bola** = **sisa saldo** | pemasukan − pengeluaran, **per bulan**; akumulasi = jumlah semua bulan |
-| **Akumulasi dividen Owner** | Σ dividen unit Liga + Σ dividen unit Sekolah Bola |
-| **Progres target** | akumulasi ÷ Rp 3.000.000.000 (akumulasi negatif dihitung 0%; bisa melebihi 100%) |
+| **Dividen final unit** | dividen unit − yang sudah diambil pemilik. Unit Liga yang event-nya belum selesai = 0 |
+| **Akumulasi dividen Owner** | Σ dividen final unit Liga + Σ dividen final unit Sekolah Bola (yang belum diambil; yang sudah diambil tampil terpisah sebagai “Sudah diambil”) |
+| **Progres target** | akumulasi (dividen final) ÷ Rp 3.000.000.000 (akumulasi negatif dihitung 0%; bisa melebihi 100%) |
 | **Akumulasi modal Owner** | Σ modal semua unit, Liga dan Sekolah Bola (tampil di Ringkasan Owner, dengan tabel modal per unit) |
 | **Akumulasi aset Owner** | Σ aset semua unit, Liga dan Sekolah Bola |
 | **Sisa saldo Laporan Keuangan** (Sekolah Bola) | saldo awal (modal) + total masuk − total keluar |
@@ -70,9 +82,12 @@ Rincian:
 
 - Baris RAB yang sudah disimpan **tidak bisa diubah lagi** (tidak ada tombol ubah; server menolaknya). Menambah baris
   tetap bisa. Hanya Owner yang bisa menghapus baris, dan tidak bisa bila baris itu sudah punya biaya actual.
-- Setiap baris RAB dipilih **Aset** atau **Non aset** (radio). Baris Aset otomatis membuat baris di menu Aset senilai total
-  baris selama program (baris mingguan × jumlah minggu program, baris bulanan sekali), tanggal = hari baris disimpan.
-  Aset hasil otomatis mengikuti sumbernya: tidak bisa diubah/dihapus sendiri, hilang bila baris RAB-nya dihapus.
+- Setiap baris RAB dipilih **Aset** atau **Non aset** (radio). Baris Aset **belum** membuat aset. Aset baru terisi saat barangnya **benar-benar dibeli**:
+  setiap biaya RAB Actual pada baris bertanda Aset otomatis menjadi satu baris di menu Aset (nama = baris RAB, nominal = uang yang dibayar,
+  tanggal = tanggal biaya, bukti sama). Mengubah atau menghapus biaya itu ikut mengubah/menghapus asetnya; aset hasil otomatis tidak bisa
+  diubah/dihapus sendiri. Biaya pada baris Non aset, atau di luar RAB, tidak membuat aset.
+- Header kolom RAB: *No · Keterangan biaya · **Jumlah Satuan** · Harga satuan · Total*. **Kategori bisa dilipat/dibuka** (klik nama kategori, atau
+  *Buka semua / Ciutkan semua*). Di layar HP tiap baris tampil sebagai kartu bertumpuk, bukan tabel lebar.
 - Sekolah Bola: pengeluaran juga dipilih Aset / Non aset. Pengeluaran Aset membuat satu baris di Aset (nama, nominal,
   tanggal, dan struk sama); mengubah pengeluaran ikut mengubah asetnya, mengganti ke Non aset atau menghapusnya
   menghapus aset itu.
@@ -96,6 +111,13 @@ Biaya **mingguan** dan **bulanan** ada di dua bagian terpisah (nomor kategori da
   ke kolom minggu sesuai tanggalnya dan biaya di minggu yang sama dijumlahkan.
 - Klik nama keterangan biaya untuk melihat rincian: tanggal bayar, minggu, nominal, bukti, catatan — dengan tombol ubah/hapus.
   Catatan sel Excel (mis. “Kopi dan rujak”) menjadi catatan biaya.
+- **Unggah Excel** (tombol di kepala halaman): unggah file seperti “file RAB Actual.xlsx” (RAB di kiri, Week 1… di kanan). File dibaca dan diperiksa dulu
+  (pratinjau: berapa baris RAB baru, berapa biaya, total yang tertulis di sheet harus cocok), baru disimpan setelah *Simpan ke RAB Actual*.
+  Baris RAB yang sudah ada di unit dipakai ulang (nama dicocokkan tanpa memandang huruf besar/kecil), hanya yang belum ada yang dibuat. Biaya
+  bertanggal hari pertama minggunya; bila unit belum punya tanggal mulai program, tanggal minggu 1 diisi di formulir unggah dan disimpan sebagai
+  tanggal mulai program. Biaya yang sama (baris, tanggal, nominal) yang sudah tercatat dilewati, jadi mengunggah file yang sama dua kali tidak
+  menggandakan. Biaya pada baris bertanda Aset otomatis masuk ke menu Aset. Aturannya ada di `lib/finance/excel/rab-actual-plan.ts`.
+- Kategori dilipat/dibuka seperti di RAB Budget; di HP tiap keterangan biaya menjadi kartu (budget, actual, sisa, dan minggu yang punya biaya).
 - **Minggu 1** dimulai pada *Tanggal mulai program* unit (diisi Owner di Kelola Unit Bisnis). Bila kosong, minggu 1 dimulai
   Senin pada minggu biaya actual pertama. Biaya sebelum minggu 1 masuk kolom “Sebelum”; biaya setelah minggu program terakhir
   melebarkan kolom.
@@ -160,7 +182,7 @@ Halaman hanya-baca `/u/<kode>/laporan-keuangan` yang menampilkan lembar “LAPOR
 | Melihat unit | semua | hanya unitnya |
 | Menambah / mengubah data | semua unit | hanya unitnya (kecuali RAB yang terkunci dan aset otomatis) |
 | Menghapus data | ya | tidak |
-| Membuat unit, akun login, dan mengubah persentase dividen | ya | tidak |
+| Membuat unit, akun login, mengubah persentase dividen, mengisi dividen yang diambil, menandai liga selesai | ya | tidak |
 | Ringkasan Owner (target dividen, akumulasi aset), Jejak Audit | ya | tidak |
 
 Akses dijaga **di server**: alamat unit lain, halaman Owner, dan jenis menu yang tidak dimiliki unit itu ditolak (dialihkan
@@ -223,4 +245,4 @@ Sekolah Bola dengan aturan terbaru (tanpa jersey, aset dari pengeluaran): `npm r
 
 Unduh Excel sesuai format formulir · tombol hapus unit di aplikasi · target dividen yang bisa diubah dari
 layar (saat ini konstanta `DIVIDEND_TARGET`) · pengingat iuran belum bayar · grafik dividen per bulan di Ringkasan Owner ·
-nilai aset dari RAB mengikuti biaya actual (saat ini mengikuti budget RAB) · hapus tabel lama `fin_dividends`.
+hapus tabel lama `fin_dividends`.
