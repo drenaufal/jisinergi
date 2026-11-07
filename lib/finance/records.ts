@@ -13,9 +13,7 @@ import {
 } from "@/lib/db/schema";
 import { auditText, recordAudit } from "@/lib/audit";
 import { releaseMedia, releaseReplaced } from "@/lib/media-store";
-import { APP_TIME_ZONE } from "@/lib/i18n/format";
 import type { TFunction } from "@/lib/i18n/translate";
-import { budgetLineProgramTotal } from "./calc";
 import { ENTITIES, type FinanceKind } from "./entities";
 import { canTouchUnit, type FinanceScope } from "./scope";
 import { UNIT_KINDS, isUnitType } from "./unit-types";
@@ -37,8 +35,6 @@ export type Actor = { id: string; name: string; role: string };
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-const todayInApp = () => new Date().toLocaleDateString("sv-SE", { timeZone: APP_TIME_ZONE });
 
 async function unitName(unitId: string) {
   const [row] = await db.select({ name: businessUnits.name }).from(businessUnits).where(eq(businessUnits.id, unitId));
@@ -203,6 +199,32 @@ async function assertKindAllowed(t: TFunction, unitId: string, kind: FinanceKind
   }
 }
 
+/**
+ * A real cost (RAB Actual) booked on a RAB line marked "Aset" is a purchase: it keeps one row in ASET in step with itself
+ * (worth what was really paid, dated when it was paid, with the same receipt). A cost on any other line has none.
+ * The RAB line alone never makes an asset — only money really spent on it does.
+ */
+async function syncCostAsset(tx: Tx, input: { t: TFunction; costId: string; unitId: string; actorId: string; row: Row }) {
+  const { t, costId, unitId, actorId, row } = input;
+  const [existing] = await tx.select({ id: finAssets.id }).from(finAssets).where(eq(finAssets.actualCostId, costId)).limit(1);
+  const [line] = row.budgetItemId
+    ? await tx.select({ name: finBudgetItems.name, isAsset: finBudgetItems.isAsset }).from(finBudgetItems).where(eq(finBudgetItems.id, row.budgetItemId)).limit(1)
+    : [];
+  if (!line?.isAsset) {
+    if (existing) await tx.delete(finAssets).where(eq(finAssets.id, existing.id));
+    return;
+  }
+  const values = {
+    purchasedOn: row.spentOn,
+    name: String(line.name).slice(0, 160),
+    amount: row.amount,
+    proofUrl: row.proofUrl ?? null,
+    note: row.note ? `${t("Dibuat otomatis dari RAB Actual")} · ${row.note}`.slice(0, 500) : t("Dibuat otomatis dari RAB Actual"),
+  };
+  if (existing) await tx.update(finAssets).set({ ...values, updatedAt: new Date() }).where(eq(finAssets.id, existing.id));
+  else await tx.insert(finAssets).values({ id: crypto.randomUUID(), businessUnitId: unitId, createdBy: actorId, actualCostId: costId, ...values });
+}
+
 /** An expense marked "Aset" keeps one row in ASET in step with itself; any other expense has none. */
 async function syncExpenseAsset(tx: Tx, input: { expenseId: string; unitId: string; actorId: string; row: Row }) {
   const { expenseId, unitId, actorId, row } = input;
@@ -239,7 +261,6 @@ export async function saveFinanceRecord(input: {
 
   let before: Row | undefined;
   let unitId: string;
-  let programWeeks = 10;
   if (id) {
     before = await loadRow(kind, id);
     if (!before || !canTouchUnit(scope, before.businessUnitId)) throw new FinanceRuleError(t("Data tidak ditemukan."));
@@ -252,20 +273,19 @@ export async function saveFinanceRecord(input: {
         : new FinanceRuleError(t("Akun Anda belum terhubung ke unit bisnis. Hubungi administrator."));
     }
     const [unit] = await db
-      .select({ id: businessUnits.id, active: businessUnits.active, programWeeks: businessUnits.programWeeks })
+      .select({ id: businessUnits.id, active: businessUnits.active })
       .from(businessUnits)
       .where(eq(businessUnits.id, wanted));
     if (!unit || !canTouchUnit(scope, unit.id)) throw new FinanceRuleError(t("Unit bisnis tidak ditemukan."));
     if (!unit.active) throw new FinanceRuleError(t("Unit bisnis ini nonaktif."));
     unitId = unit.id;
-    programWeeks = unit.programWeeks;
   }
 
-  // A saved RAB line is final. An asset made from a RAB line or an expense follows its source.
+  // A saved RAB line is final. An asset made from a RAB Actual cost or an expense follows its source.
   if (id && kind === "budget") throw new FinanceRuleError(t("Baris RAB yang sudah disimpan tidak dapat diubah."));
-  if (id && kind === "asset" && (before?.budgetItemId || before?.expenseId)) {
+  if (id && kind === "asset" && (before?.actualCostId || before?.expenseId)) {
     throw new FinanceRuleError(
-      before.budgetItemId ? t("Aset ini dibuat otomatis dari RAB, jadi tidak dapat diubah di sini.") : t("Aset ini dibuat otomatis dari pengeluaran — ubah pengeluarannya."),
+      before.actualCostId ? t("Aset ini dibuat otomatis dari RAB Actual — ubah biaya actualnya.") : t("Aset ini dibuat otomatis dari pengeluaran — ubah pengeluarannya."),
     );
   }
 
@@ -284,19 +304,8 @@ export async function saveFinanceRecord(input: {
       } else {
         await tx.insert(table).values({ id: rowId, businessUnitId: unitId, createdBy: actor.id, ...row });
       }
-      if (kind === "budget" && row.isAsset) {
-        // an asset line of the RAB also becomes an asset (worth the line's budget over the program)
-        await tx.insert(finAssets).values({
-          id: crypto.randomUUID(),
-          businessUnitId: unitId,
-          createdBy: actor.id,
-          budgetItemId: rowId,
-          purchasedOn: todayInApp(),
-          name: String(row.name).slice(0, 160),
-          amount: budgetLineProgramTotal({ period: row.period, quantity: row.quantity, unitPrice: row.unitPrice }, programWeeks),
-          note: t("Dibuat otomatis dari RAB"),
-        });
-      }
+      // an asset line of the RAB makes no asset by itself; a real cost booked on it does (see syncCostAsset)
+      if (kind === "actualcost") await syncCostAsset(tx, { t, costId: rowId, unitId, actorId: actor.id, row });
       if (kind === "expense") await syncExpenseAsset(tx, { expenseId: rowId, unitId, actorId: actor.id, row });
     });
   } catch (error) {
@@ -335,9 +344,9 @@ export async function deleteFinanceRecord(input: {
   const table = def.table as any;
   const row = await loadRow(kind, id);
   if (!row || !canTouchUnit(scope, row.businessUnitId)) throw new FinanceRuleError(t("Data tidak ditemukan."));
-  if (kind === "asset" && (row.budgetItemId || row.expenseId)) {
+  if (kind === "asset" && (row.actualCostId || row.expenseId)) {
     throw new FinanceRuleError(
-      row.budgetItemId ? t("Aset ini dibuat otomatis dari RAB — hapus baris RABnya untuk menghapus aset ini.") : t("Aset ini dibuat otomatis dari pengeluaran — hapus pengeluarannya untuk menghapus aset ini."),
+      row.actualCostId ? t("Aset ini dibuat otomatis dari RAB Actual — hapus biaya actualnya untuk menghapus aset ini.") : t("Aset ini dibuat otomatis dari pengeluaran — hapus pengeluarannya untuk menghapus aset ini."),
     );
   }
 

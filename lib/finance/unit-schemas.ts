@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { TFunction } from "@/lib/i18n/translate";
+import { mediaIdFromUrl } from "@/lib/media";
 import { ownersSchema } from "./ownership";
 import { isIsoDate } from "./period";
 import { UNIT_TYPES } from "./unit-types";
@@ -26,6 +27,13 @@ const weeks = (t: TFunction) =>
 const startsOn = (t: TFunction) =>
   z.preprocess((v) => (v === "" || v == null ? null : v), z.string().trim().refine(isIsoDate, t("Tanggal tidak valid")).nullable());
 
+/** The unit's logo: blank (no logo) or an image uploaded through the app. */
+const logo = (t: TFunction) =>
+  z.preprocess(
+    (v) => (typeof v === "string" && v.trim() ? v.trim() : null),
+    z.string().refine((v) => mediaIdFromUrl(v) !== null, t("Logo tidak valid — unggah ulang")).nullable(),
+  );
+
 const description = (t: TFunction) =>
   z.preprocess(
     (v) => (typeof v === "string" && v.trim() ? v.trim() : null),
@@ -42,6 +50,7 @@ export const makeNewUnitSchema = (t: TFunction) =>
     name: z.string().trim().min(2, t("Nama unit minimal 2 karakter")).max(120, t("Maksimal {n} karakter", { n: 120 })),
     type: z.enum(UNIT_TYPES, t("Pilih jenis unit bisnis")),
     description: description(t),
+    logoUrl: logo(t),
     programWeeks: weeks(t),
     programStartsOn: startsOn(t),
     /** Who owns the unit and each owner's share of its dividend (and, for a Sekolah Bola, the modal they put in). */

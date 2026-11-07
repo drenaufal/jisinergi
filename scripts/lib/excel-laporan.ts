@@ -7,8 +7,8 @@
  *   2. "BUKTI TRANSFER & NOMINAL UANG": the RAB (weekly and monthly forecasting) with, per week, the transfer proof
  *      and the amount really paid for each line.
  */
-import { sheetReader, type Workbook } from "./xlsx-reader";
-import { budgetOf, emptyParsed, tidy, type ParsedUnit, type Period } from "./excel-types";
+import { sheetReader, type Workbook } from "@/lib/finance/excel/xlsx-reader";
+import { budgetOf, emptyParsed, tidy, type ParsedUnit, type Period } from "@/lib/finance/excel/excel-types";
 
 const WEEKS = 10;
 

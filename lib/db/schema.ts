@@ -134,6 +134,10 @@ export const businessUnits = mysqlTable("business_units", {
   programWeeks: int("program_weeks").notNull().default(10),
   /** Liga only: the first day of week 1. RAB Actual puts every cost in the week it was paid. Blank = the week of the first cost. */
   programStartsOn: date("program_starts_on"),
+  /** The unit's logo: an uploaded image (`/api/media/<id>`), blank = the first letter of its name is shown instead. */
+  logoUrl: text("logo_url"),
+  /** Liga only: the day the owner marked the league event as finished. The Liga dividend only exists (can be taken, counts for the Owner) from then on. */
+  leagueFinishedOn: date("league_finished_on"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at").default(NOW).notNull(),
 });
@@ -152,6 +156,10 @@ export const finUnitOwners = mysqlTable(
     name: varchar("name", { length: 120 }).notNull(),
     shareBp: int("share_bp").notNull(),
     position: int("position").notNull().default(0),
+    /** Rupiah of this owner's dividend share already taken. "Dividen final" = share − taken. */
+    takenAmount: rupiah("taken_amount").notNull().default(0),
+    /** The day the last withdrawal was entered. */
+    takenOn: date("taken_on"),
     createdAt: timestamp("created_at").default(NOW).notNull(),
   },
   (t) => [index("fin_unit_owners_unit_idx").on(t.businessUnitId, t.position)],
@@ -184,8 +192,9 @@ const ledger = () => ({
 
 /**
  * ASET — equipment & match facilities the unit bought. A row is typed in by hand, or created
- * automatically from an asset line of the RAB (`budgetItemId`) or from a Sekolah Bola expense marked
- * as asset (`expenseId`); those follow their source and cannot be edited here.
+ * automatically from a real purchase: a RAB Actual cost booked on an asset line of the RAB (`actualCostId`),
+ * or a Sekolah Bola expense marked as asset (`expenseId`). Those follow their source and cannot be edited here.
+ * A RAB line marked Aset makes nothing by itself — only the money really spent on it does.
  */
 export const finAssets = mysqlTable(
   "fin_assets",
@@ -197,12 +206,12 @@ export const finAssets = mysqlTable(
     amount: rupiah("amount").notNull(),
     proofUrl: text("proof_url"),
     note: text("note"),
-    budgetItemId: uuid("budget_item_id").references(() => finBudgetItems.id, { onDelete: "cascade" }),
+    actualCostId: uuid("actual_cost_id").references(() => finActualCosts.id, { onDelete: "cascade" }),
     expenseId: uuid("expense_id").references(() => finExpenses.id, { onDelete: "cascade" }),
   },
   (t) => [
     index("fin_assets_unit_date_idx").on(t.businessUnitId, t.purchasedOn),
-    uniqueIndex("fin_assets_budget_item_idx").on(t.budgetItemId),
+    uniqueIndex("fin_assets_actual_cost_idx").on(t.actualCostId),
     uniqueIndex("fin_assets_expense_idx").on(t.expenseId),
   ],
 );

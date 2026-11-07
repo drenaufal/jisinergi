@@ -84,8 +84,13 @@ function UnitGroup({ unit, pathname, onNavigate, alwaysOpen }: { unit: NavUnit; 
           inside ? "text-white" : "text-night-muted",
         )}
       >
-        <span className={cn("grid size-6 shrink-0 place-items-center border text-[10px] font-bold", inside ? "border-white bg-white text-black" : "border-night-line")}>
-          {unit.name.slice(0, 1).toUpperCase()}
+        <span className={cn("grid size-6 shrink-0 place-items-center overflow-hidden border text-[10px] font-bold", inside ? "border-white bg-white text-black" : "border-night-line")}>
+          {unit.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={unit.logoUrl} alt="" className="size-full bg-white object-contain" />
+          ) : (
+            unit.name.slice(0, 1).toUpperCase()
+          )}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold">{unit.name}</span>

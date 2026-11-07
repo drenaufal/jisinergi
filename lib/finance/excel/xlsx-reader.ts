@@ -43,7 +43,8 @@ function readZip(buffer: Buffer) {
     const start = entry.offset + 30 + nameLength + extraLength;
     const raw = buffer.subarray(start, start + entry.compressedSize);
     if (entry.method === 0) return Buffer.from(raw);
-    if (entry.method === 8) return inflateRawSync(raw);
+    // an uploaded workbook is untrusted: cap what a compressed part may unpack to
+    if (entry.method === 8) return inflateRawSync(raw, { maxOutputLength: 64 * 1024 * 1024 });
     throw new Error(`Unsupported zip compression method ${entry.method} for ${name}.`);
   };
   return { names: [...entries.keys()], read };
@@ -104,7 +105,13 @@ export const colName = (col: number) => {
 const MIME: Record<string, string> = { jpeg: "image/jpeg", jpg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
 
 export function readWorkbook(path: string): Workbook {
-  const zip = readZip(readFileSync(path));
+  return readWorkbookBuffer(readFileSync(path));
+}
+
+/** The same, from the bytes of a workbook (an upload). Throws when the bytes are not an .xlsx file. */
+export function readWorkbookBuffer(buffer: Buffer): Workbook {
+  const zip = readZip(buffer);
+  if (!zip.names.includes("xl/workbook.xml")) throw new Error("Not an .xlsx workbook (xl/workbook.xml is missing).");
   const text = (name: string) => zip.read(name)?.toString("utf8") ?? null;
   const rels = (name: string) => {
     const xml = text(name);
