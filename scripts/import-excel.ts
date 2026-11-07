@@ -4,10 +4,10 @@ config({ path: ".env.local", quiet: true });
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readWorkbook, type Workbook } from "./lib/xlsx-reader";
-import { parseRabActual } from "./lib/excel-rab-actual";
+import { readWorkbook, type Workbook } from "@/lib/finance/excel/xlsx-reader";
+import { parseRabActual } from "@/lib/finance/excel/excel-rab-actual";
 import { parseLaporan } from "./lib/excel-laporan";
-import type { ParsedUnit } from "./lib/excel-types";
+import type { ParsedUnit } from "@/lib/finance/excel/excel-types";
 
 /**
  * Loads the two sample workbooks the unit admins keep into the database as two Liga units, so every screen can be tried
@@ -189,31 +189,15 @@ async function main() {
           })),
         );
       }
-      // an asset line of the RAB is also a row in Aset (worth the line's budget over the program), dated at its first cost
-      const assetLines = data.lines.map((l, i) => ({ l, i })).filter((x) => x.l.isAsset);
-      if (assetLines.length) {
-        await tx.insert(s.finAssets).values(
-          assetLines.map(({ l, i }) => {
-            const first = Math.min(...data.costs.filter((c) => "line" in c.target && c.target.line === i).map((c) => c.week), Infinity);
-            return {
-              id: crypto.randomUUID(),
-              businessUnitId: unitId,
-              budgetItemId: lineIds[i],
-              purchasedOn: Number.isFinite(first) ? dateOf(first) : dataset.startsOn,
-              name: l.name.slice(0, 160),
-              amount: l.quantity * l.unitPrice * (l.period === "weekly" ? programWeeks : 1),
-              note: "Dibuat otomatis dari RAB",
-            };
-          }),
-        );
-      }
       if (data.extras.length) {
         await tx.insert(s.finActualItems).values(data.extras.map((e, i) => ({ id: extraIds[i], businessUnitId: unitId, period: e.period, category: e.category, name: e.name })));
       }
-      for (const rows of chunks(data.costs, 100)) {
+      // every cost gets its id up front: a cost on an asset line is a purchase, and the asset points at it
+      const costIds = data.costs.map(() => crypto.randomUUID());
+      for (const rows of chunks(data.costs.map((c, i) => ({ c, id: costIds[i] })), 100)) {
         await tx.insert(s.finActualCosts).values(
-          rows.map((c) => ({
-            id: crypto.randomUUID(),
+          rows.map(({ c, id }) => ({
+            id,
             businessUnitId: unitId,
             budgetItemId: "line" in c.target ? lineIds[c.target.line] : null,
             actualItemId: "extra" in c.target ? extraIds[c.target.extra] : null,
@@ -221,6 +205,21 @@ async function main() {
             spentOn: dateOf(c.week),
             proofUrl: proof(c.image),
             note: c.note,
+          })),
+        );
+      }
+      // a cost on a RAB line marked Aset also shows up in Aset (what was paid, on the day it was paid)
+      const purchases = data.costs.map((c, i) => ({ c, id: costIds[i] })).filter(({ c }) => "line" in c.target && data.lines[c.target.line].isAsset);
+      if (purchases.length) {
+        await tx.insert(s.finAssets).values(
+          purchases.map(({ c, id }) => ({
+            id: crypto.randomUUID(),
+            businessUnitId: unitId,
+            actualCostId: id,
+            purchasedOn: dateOf(c.week),
+            name: data.lines["line" in c.target ? c.target.line : 0].name.slice(0, 160),
+            amount: c.amount,
+            note: "Dibuat otomatis dari RAB Actual",
           })),
         );
       }

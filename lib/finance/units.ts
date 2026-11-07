@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { businessUnitMembers, businessUnits, finCapital, finUnitOwners, users } from "@/lib/db/schema";
 import { APP_TIME_ZONE } from "@/lib/i18n/format";
 import type { TFunction } from "@/lib/i18n/translate";
+import { releaseReplaced } from "@/lib/media-store";
 import type { OwnerInput } from "./ownership";
 import { makeEditLoginSchema, makeEditUnitSchema, makeNewLoginSchema, makeNewUnitSchema } from "./unit-schemas";
 
@@ -32,8 +33,21 @@ export class UnitRuleError extends Error {
   }
 }
 
-const ownerRows = (unitId: string, owners: readonly Pick<OwnerInput, "name" | "shareBp">[]) =>
-  owners.map((o, i) => ({ id: crypto.randomUUID(), businessUnitId: unitId, name: o.name, shareBp: o.shareBp, position: i + 1 }));
+const ownerRows = (
+  unitId: string,
+  owners: readonly Pick<OwnerInput, "name" | "shareBp">[],
+  /** What each owner (by lower-case name) already took, kept when the owners are rewritten. */
+  taken: ReadonlyMap<string, { takenAmount: number; takenOn: string | null }> = new Map(),
+) =>
+  owners.map((o, i) => ({
+    id: crypto.randomUUID(),
+    businessUnitId: unitId,
+    name: o.name,
+    shareBp: o.shareBp,
+    position: i + 1,
+    takenAmount: taken.get(o.name.toLowerCase())?.takenAmount ?? 0,
+    takenOn: taken.get(o.name.toLowerCase())?.takenOn ?? null,
+  }));
 
 /**
  * Creates the unit with its owners in one transaction. A Sekolah Bola also records the modal each owner
@@ -68,10 +82,23 @@ export async function createUnit(t: TFunction, input: z.output<ReturnType<typeof
 export async function replaceUnitOwners(t: TFunction, unitId: string, owners: readonly Pick<OwnerInput, "name" | "shareBp">[]) {
   const [unit] = await db.select({ id: businessUnits.id, name: businessUnits.name }).from(businessUnits).where(eq(businessUnits.id, unitId));
   if (!unit) throw new UnitRuleError(t("Unit bisnis tidak ditemukan."));
-  const before = await db.select({ name: finUnitOwners.name, shareBp: finUnitOwners.shareBp }).from(finUnitOwners).where(eq(finUnitOwners.businessUnitId, unitId)).orderBy(asc(finUnitOwners.position));
+  const before = await db
+    .select({ name: finUnitOwners.name, shareBp: finUnitOwners.shareBp, takenAmount: finUnitOwners.takenAmount, takenOn: finUnitOwners.takenOn })
+    .from(finUnitOwners)
+    .where(eq(finUnitOwners.businessUnitId, unitId))
+    .orderBy(asc(finUnitOwners.position));
+  // The owners are rewritten as a whole, so what each one already took has to be carried over by name — and an owner who took money cannot disappear.
+  const kept = new Set(owners.map((o) => o.name.toLowerCase()));
+  const dropped = before.find((o) => o.takenAmount > 0 && !kept.has(o.name.toLowerCase()));
+  if (dropped) {
+    throw new UnitRuleError(t("Periksa kembali isian formulir."), {
+      owners: t("{name} sudah mengambil dividen, jadi tidak bisa dihapus atau diganti namanya.", { name: dropped.name }),
+    });
+  }
+  const taken = new Map(before.map((o) => [o.name.toLowerCase(), { takenAmount: o.takenAmount, takenOn: o.takenOn }]));
   await db.transaction(async (tx) => {
     await tx.delete(finUnitOwners).where(eq(finUnitOwners.businessUnitId, unitId));
-    await tx.insert(finUnitOwners).values(ownerRows(unitId, owners));
+    await tx.insert(finUnitOwners).values(ownerRows(unitId, owners, taken));
   });
   return { unit, before, after: owners.map((o) => ({ name: o.name, shareBp: o.shareBp })) };
 }
@@ -80,6 +107,7 @@ export async function updateUnit(t: TFunction, id: string, input: z.output<Retur
   const [before] = await db.select().from(businessUnits).where(eq(businessUnits.id, id));
   if (!before) throw new UnitRuleError(t("Unit bisnis tidak ditemukan."));
   await db.update(businessUnits).set(input).where(eq(businessUnits.id, id));
+  await releaseReplaced(before.logoUrl, input.logoUrl);
   return { before, after: { ...before, ...input } };
 }
 

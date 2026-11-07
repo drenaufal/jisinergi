@@ -63,7 +63,16 @@ export default async function BusinessUnitsPage() {
               <Card key={unit.id}>
                 <CardContent className="space-y-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="flex min-w-0 gap-3">
+                      <span className="grid size-12 shrink-0 place-items-center overflow-hidden border border-line bg-surface-2 text-base font-bold text-ink-muted">
+                        {unit.logoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={unit.logoUrl} alt={`Logo ${unit.name}`} className="size-full bg-white object-contain" />
+                        ) : (
+                          unit.name.slice(0, 1).toUpperCase()
+                        )}
+                      </span>
+                      <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-lg font-semibold tracking-tight text-ink">{unit.name}</h2>
                         <Badge tone="brand">{UNIT_TYPE_LABEL[unit.type]}</Badge>
@@ -79,6 +88,7 @@ export default async function BusinessUnitsPage() {
                         <span className="font-semibold text-ink">Kepemilikan:</span>{" "}
                         {unitOwners.length ? unitOwners.map((o) => `${o.name} ${bpToField(o.shareBp)}%`).join(" · ") : "belum diatur — isi di menu Dividen unit ini"}
                       </p>
+                      </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Link href={menuHref(unit.code)} className="flex items-center gap-1 text-xs font-semibold text-ink underline underline-offset-2">

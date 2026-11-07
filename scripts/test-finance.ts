@@ -39,7 +39,9 @@ import {
   type PaymentAmounts,
   type UnitDataset,
 } from "@/lib/finance/calc";
-import { BP_TOTAL, bpToField, equalShares, ownersSchema, percentToBp, readOwnerRows, splitByShares } from "@/lib/finance/ownership";
+import { BP_TOTAL, bpToField, dividendFinal, equalShares, maxTaken, ownerPayouts, ownersSchema, percentToBp, readOwnerRows, splitByShares } from "@/lib/finance/ownership";
+import { planRabActualImport } from "@/lib/finance/excel/rab-actual-plan";
+import { emptyParsed } from "@/lib/finance/excel/excel-types";
 import { DIVIDEND_TARGET } from "@/lib/finance/config";
 import { currentMonth } from "@/lib/finance/period";
 import { UNIT_KINDS } from "@/lib/finance/unit-types";
@@ -368,8 +370,8 @@ eq((budgetSchema(t).parse({ ...budgetInput, assetType: "asset" }) as { isAsset: 
 eq((budgetSchema(t).parse({ ...budgetInput, assetType: "non_asset" }) as { isAsset: boolean }).isAsset, false, "budget: the Non aset radio");
 ok(!budgetSchema(t).safeParse({ ...budgetInput, assetType: "maybe" }).success, "budget: only Aset or Non aset");
 ok(!("assetType" in (budgetSchema(t).parse({ ...budgetInput, assetType: "asset" }) as object)), "budget: the radio value is stored as isAsset, not as a text column");
-eq(budgetLineProgramTotal({ period: "weekly", quantity: 2, unitPrice: 150000 }, 10), 3000000, "asset from the RAB: a weekly line is worth its weekly cost × the program weeks");
-eq(budgetLineProgramTotal({ period: "monthly", quantity: 2, unitPrice: 150000 }, 10), 300000, "asset from the RAB: a one-off line is worth its cost once");
+eq(budgetLineProgramTotal({ period: "weekly", quantity: 2, unitPrice: 150000 }, 10), 3000000, "RAB: a weekly line is worth its weekly cost × the program weeks");
+eq(budgetLineProgramTotal({ period: "monthly", quantity: 2, unitPrice: 150000 }, 10), 300000, "RAB: a one-off line is worth its cost once");
 const expenseInput = { spentOn: date, category: "Perlengkapan", name: "Bola latihan", amount: "750000", proofUrl: "", note: "" };
 eq((expenseSchema(t).parse(expenseInput) as { isAsset: boolean }).isAsset, false, "expense: non-asset by default");
 eq((expenseSchema(t).parse({ ...expenseInput, assetType: "asset" }) as { isAsset: boolean }).isAsset, true, "expense: the Aset radio marks an asset expense");
@@ -478,6 +480,53 @@ ok(ENTITIES.otherincome.proofs.length === 1, "receipt columns: other income has 
 const withOther = unitFigures({ ...ligaData, otherIncome: [{ amount: 61000 }, { amount: 200000 }] });
 eq([withOther.otherIncome, withOther.income, withOther.dividend.value], [{ total: 261000, count: 2 }, liga.income, liga.dividend.value], "other income: counted on its own, not in the income of the formula nor the dividend");
 eq(unitFigures(ligaData).otherIncome, { total: 0, count: 0 }, "other income: none yet");
+
+/* ── Dividen: diambil dan dividen final ── */
+const takers = [{ shareBp: 6000, takenAmount: 0 }, { shareBp: 4000, takenAmount: 100 }];
+eq(ownerPayouts(1000, takers), [{ share: 600, taken: 0, final: 600 }, { share: 400, taken: 100, final: 300 }], "payout: share, taken and dividen final per owner");
+eq(ownerPayouts(-1000, takers).map((p) => p.share), [-600, -400], "payout: a loss is shared the same way");
+eq([maxTaken(600), maxTaken(-5), maxTaken(0)], [600, 0, 0], "payout: at most the share can be taken, nothing from a loss");
+eq(dividendFinal(1000, 100), { dividend: 1000, taken: 100, generated: true, final: 900 }, "dividen final: dividend − taken");
+eq(dividendFinal(1000, 0).final, 1000, "dividen final: nothing taken yet, the whole dividend counts");
+eq(dividendFinal(1000, 0, false).final, 0, "dividen final: a Liga whose event is not finished counts 0");
+
+/* ── Upload RAB Actual: what loading a workbook into a unit would do ── */
+{
+  const parsed = emptyParsed();
+  parsed.lines.push(
+    { period: "weekly", category: "Sewa", categoryOrder: 1, name: "Sewa lapangan", itemOrder: 1, quantity: 1, unitPrice: 100, note: null, isAsset: false },
+    { period: "monthly", category: "Peralatan", categoryOrder: 1, name: "Dispenser", itemOrder: 1, quantity: 1, unitPrice: 500, note: null, isAsset: true },
+  );
+  parsed.extras.push({ period: "weekly", category: "Sewa", name: "Sewa HT" });
+  parsed.costs.push(
+    { target: { line: 0 }, week: 1, amount: 100, image: null, note: null },
+    { target: { line: 0 }, week: 2, amount: 100, image: null, note: "lunas" },
+    { target: { line: 1 }, week: 1, amount: 500, image: null, note: null },
+    { target: { extra: 0 }, week: 2, amount: 50, image: null, note: null },
+  );
+  const existingBudget = [{ id: "line-sewa", period: "weekly" as const, category: "SEWA", categoryOrder: 3, name: "sewa  lapangan", itemOrder: 4, isAsset: false }];
+  const plan = planRabActualImport({ parsed, startsOn: "2026-10-05", existingBudget, existingExtras: [], existingCosts: [] });
+  eq(plan.newLines.map((l) => [l.name, l.categoryOrder, l.itemOrder, l.isAsset]), [["Dispenser", 1, 1, true]], "upload: only the RAB lines the unit does not have are created (names match ignoring case and spacing)");
+  eq(plan.newExtras.map((e) => e.name), ["Sewa HT"], "upload: a line outside the RAB becomes an extra line");
+  eq(plan.costs.map((c) => [c.week, c.spentOn, c.amount]), [[1, "2026-10-05", 100], [2, "2026-10-12", 100], [1, "2026-10-05", 500], [2, "2026-10-12", 50]], "upload: every cost is dated on the first day of its week");
+  eq(plan.costs[0].budgetItemId, "line-sewa", "upload: a cost on a line the unit already has uses that line");
+  eq(plan.costs.map((c) => c.isAsset), [false, false, true, false], "upload: a cost on an asset line is a purchase (it will also be an asset)");
+  eq(plan.summary.costs, { total: 4, amount: 750, duplicates: 0, imported: 4, importedAmount: 750, lastWeek: 2 }, "upload: the preview counts");
+  const again = planRabActualImport({
+    parsed,
+    startsOn: "2026-10-05",
+    existingBudget: [...existingBudget, { id: "line-dispenser", period: "monthly", category: "Peralatan", categoryOrder: 1, name: "Dispenser", itemOrder: 1, isAsset: true }],
+    existingExtras: [{ id: "extra-ht", period: "weekly", category: "Sewa", name: "Sewa HT" }],
+    existingCosts: [
+      { budgetItemId: "line-sewa", actualItemId: null, spentOn: "2026-10-05", amount: 100 },
+      { budgetItemId: null, actualItemId: "extra-ht", spentOn: "2026-10-12", amount: 50 },
+    ],
+  });
+  eq([again.newLines.length, again.newExtras.length, again.summary.costs.duplicates, again.summary.costs.imported], [0, 0, 2, 2], "upload: loading the same file again skips what the unit already has");
+  eq(again.costs.map((c) => c.budgetItemId ?? c.actualItemId), ["line-sewa", "line-dispenser"], "upload: the rest still lands on the existing lines");
+  const inRab = planRabActualImport({ parsed, startsOn: "2026-10-05", existingBudget: [...existingBudget, { id: "line-ht", period: "weekly", category: "Sewa", categoryOrder: 3, name: "Sewa HT", itemOrder: 5, isAsset: false }], existingExtras: [], existingCosts: [] });
+  eq([inRab.newExtras.length, inRab.costs[3].budgetItemId], [0, "line-ht"], "upload: an extra line whose name is already in the RAB is booked on the RAB line");
+}
 
 /* ── Formatting ── */
 const id = makeFormatters("id");

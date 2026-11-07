@@ -473,7 +473,7 @@ function RecordForm({
             <Field label={t("Nama biaya")} error={fe.name}>
               <Input name="name" required maxLength={200} defaultValue={val("name")} />
             </Field>
-            <Field label={t("Jumlah")} error={fe.quantity}>
+            <Field label={t("Jumlah satuan")} error={fe.quantity}>
               <Input type="number" name="quantity" required min={0} step={1} defaultValue={val("quantity", "1")} onChange={(e) => setQty(Number(e.target.value) || 0)} />
             </Field>
             <Field label={t("Harga satuan")} error={fe.unitPrice}>
@@ -488,7 +488,7 @@ function RecordForm({
               error={fe.assetType}
               hint={
                 assetKind === "asset"
-                  ? t("Baris ini otomatis masuk ke menu Aset senilai {amount}.", { amount: fmt.rupiah(qty * price * (period === "weekly" ? ctx.programWeeks ?? 1 : 1)) })
+                  ? t("Belum masuk ke menu Aset. Setiap kali barang ini benar-benar dibeli (dicatat sebagai biaya actual di RAB Actual), pembeliannya otomatis tercatat di menu Aset.")
                   : t("Hanya menjadi anggaran, tidak masuk ke menu Aset.")
               }
             />
@@ -588,7 +588,7 @@ function RecordForm({
         </p>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="sticky bottom-0 -mx-6 -mb-6 flex items-center gap-2 border-t border-line bg-surface px-6 py-3">
         <Button type="submit" disabled={pending}>
           {pending ? <Loader2 className="animate-spin" /> : <Save />}
           {pending ? t("Menyimpan…") : record ? t("Simpan perubahan") : t("Simpan")}

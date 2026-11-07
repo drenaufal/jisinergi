@@ -14,7 +14,7 @@ Tampilan hitam-putih, sudut siku, bahasa Indonesia.
 | **Liga** | Aset · Dividen · Modal · Match Fee (+ pemasukan lain) · Registrasi · RAB Budget · RAB Actual |
 | **Sekolah Bola** | Pemasukan (siswa + pembayaran) · Pengeluaran · Laporan Keuangan · Aset · Modal · Dividen |
 
-Setiap unit punya **pemilik** (boleh lebih dari dua) dengan persentase dividen masing-masing; Owner mengubah persentasenya di menu Dividen. Baris **RAB Budget** yang sudah disimpan tidak bisa diubah, dan baris/pengeluaran bertanda **Aset** otomatis masuk ke menu Aset. Setiap unit juga punya halaman **Ringkasan** dengan angka dan grafik.
+Setiap unit punya **pemilik** (boleh lebih dari dua) dengan persentase dividen masing-masing; Owner mengubah persentasenya di menu Dividen. Baris **RAB Budget** yang sudah disimpan tidak bisa diubah. Menu **Aset** terisi otomatis dari pembelian nyata: biaya **RAB Actual** pada baris RAB bertanda Aset, dan pengeluaran Sekolah Bola bertanda Aset. RAB Actual bisa diunggah dari Excel, dan tiap unit bisa punya logo. Setiap unit juga punya halaman **Ringkasan** dengan angka dan grafik.
 
 ## Peran
 
@@ -27,8 +27,8 @@ Setiap unit punya **pemilik** (boleh lebih dari dua) dengan persentase dividen m
 
 - **Dividen Liga** = (uang modal + uang masuk registrasi + uang masuk match fee) − RAB Actual
 - **Dividen Sekolah Bola (per bulan)** = pemasukan − pengeluaran (**sisa saldo**), dihitung per bulan lalu dijumlahkan
-- **Bagian tiap pemilik** = dividen unit × persentase pemilik itu
-- **Akumulasi Owner** = dividen semua unit Liga + dividen semua unit Sekolah Bola, dibandingkan dengan target `DIVIDEND_TARGET` (Rp 3.000.000.000, di `lib/finance/config.ts`)
+- **Bagian tiap pemilik** = dividen unit × persentase pemilik itu; **Dividen final** pemilik = bagian − yang sudah diambil (Owner mengisi “Ambil” di menu Dividen; Liga hanya bisa diambil seluruhnya dan baru setelah event liga ditandai selesai)
+- **Akumulasi Owner** = dividen final (yang belum diambil) semua unit Liga yang sudah selesai + semua unit Sekolah Bola, dibandingkan dengan target `DIVIDEND_TARGET` (Rp 3.000.000.000, di `lib/finance/config.ts`)
 
 Detail dan keputusan baca data: [docs/finance.md](docs/finance.md).
 

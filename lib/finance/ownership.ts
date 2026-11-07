@@ -51,6 +51,29 @@ export function splitByShares(total: number, shares: readonly number[]): number[
   return parts.map((p, i) => sign * (Number(p.whole) + (bonus.has(i) ? 1 : 0)));
 }
 
+/* ── Pengambilan dividen (dividend taken) ────────────────────────────── */
+
+/** One owner's dividend: the share, what was already taken, and what is left ("dividen final"). */
+export type OwnerPayout = { share: number; taken: number; final: number };
+
+/** Each owner's share of `dividend` (exact, see splitByShares) next to what they already took. */
+export function ownerPayouts(dividend: number, owners: readonly { shareBp: number; takenAmount: number }[]): OwnerPayout[] {
+  const shares = splitByShares(dividend, owners.map((o) => o.shareBp));
+  return owners.map((o, i) => ({ share: shares[i], taken: o.takenAmount, final: shares[i] - o.takenAmount }));
+}
+
+/** The most an owner can take out of a share: all of it, and nothing from a loss. */
+export const maxTaken = (share: number) => Math.max(0, share);
+
+/**
+ * What a unit's dividend comes to once the withdrawals are subtracted: dividend − everything taken.
+ * This "dividen final" is the figure the Owner overview adds up. A Liga whose event is not finished has
+ * no dividend yet, so it counts as 0 there (`generated` = false).
+ */
+export function dividendFinal(dividend: number, taken: number, generated = true) {
+  return { dividend, taken, generated, final: generated ? dividend - taken : 0 };
+}
+
 /* ── Validation of the owners typed into a form ─────────────────────── */
 
 export type OwnerInput = { name: string; shareBp: number; capital: number };

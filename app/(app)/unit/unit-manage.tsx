@@ -7,13 +7,14 @@ import { createLoginAction, createUnitAction, updateLoginAction, updateUnitActio
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
+import { LogoUpload } from "@/components/app/logo-upload";
 import { OwnersEditor } from "@/components/finance/owners-editor";
 import { UNIT_TYPE_HINT, UNIT_TYPE_LABEL, UNIT_TYPES, type UnitType } from "@/lib/finance/unit-types";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toaster";
 import { useT } from "@/lib/i18n/client";
 
-export type UnitData = { id: string; code: string; name: string; type: UnitType; description: string | null; programWeeks: number; programStartsOn: string | null; active: boolean };
+export type UnitData = { id: string; code: string; name: string; type: UnitType; description: string | null; programWeeks: number; programStartsOn: string | null; logoUrl: string | null; active: boolean };
 export type LoginData = { userId: string; name: string; email: string; active: boolean };
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -53,7 +54,8 @@ function Footer({ pending, saveLabel, error, onCancel }: { pending: boolean; sav
           {error}
         </p>
       )}
-      <div className="flex gap-2">
+      {/* stays at the bottom of the scrolling dialog, so the save button is always in reach */}
+      <div className="sticky bottom-0 -mx-6 -mb-6 flex gap-2 border-t border-line bg-surface px-6 py-3">
         <Button type="submit" disabled={pending}>
           {pending ? <Loader2 className="animate-spin" /> : <Save />}
           {pending ? t("Menyimpan…") : saveLabel}
@@ -138,6 +140,9 @@ function UnitCreateForm({ onDone }: { onDone: () => void }) {
           <Field label={t("Keterangan")} error={fe.description} hint={t("Opsional")} className={type === "liga" ? "sm:col-span-2" : ""}>
             <Textarea name="description" rows={2} maxLength={300} defaultValue={val("description")} />
           </Field>
+          <div className="sm:col-span-2">
+            <LogoUpload name="logoUrl" label={t("Logo unit bisnis")} defaultValue={val("logoUrl")} error={fe.logoUrl} />
+          </div>
         </Section>
         <fieldset>
           <legend className="border-b border-line pb-1 text-[11px] font-semibold uppercase tracking-wider text-ink">{t("Kepemilikan")}</legend>
@@ -197,6 +202,9 @@ function UnitEditForm({ unit, onDone }: { unit: UnitData; onDone: () => void }) 
           <Field label={t("Keterangan")} error={fe.description} className="sm:col-span-2">
             <Textarea name="description" rows={2} maxLength={300} defaultValue={val("description", unit.description ?? "")} />
           </Field>
+          <div className="sm:col-span-2">
+            <LogoUpload name="logoUrl" label={t("Logo unit bisnis")} defaultValue={val("logoUrl", unit.logoUrl ?? "")} error={fe.logoUrl} />
+          </div>
           <label className="flex items-center gap-2 text-xs font-medium sm:col-span-2">
             <input name="active" type="checkbox" defaultChecked={state?.values ? state.values.active === "on" : unit.active} />
             {t("Unit aktif")}

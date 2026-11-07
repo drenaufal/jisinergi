@@ -8,6 +8,7 @@ export type NavUnit = {
   name: string;
   type: UnitType;
   active: boolean;
+  logoUrl: string | null;
   /** The unit's own summary page. */
   href: string;
   links: NavLink[];
@@ -25,7 +26,7 @@ export type NavModel = {
  */
 export function buildNav(
   user: { role: Role },
-  units: readonly { code: string; name: string; type: UnitType; active: boolean }[],
+  units: readonly { code: string; name: string; type: UnitType; active: boolean; logoUrl?: string | null }[],
 ): NavModel {
   const general: NavLink[] = [];
   if (can(user.role, "all-units")) general.push({ href: "/ringkasan", label: "Ringkasan Owner", hint: "Dividen dan target" });
@@ -39,6 +40,7 @@ export function buildNav(
       name: u.name,
       type: u.type,
       active: u.active,
+      logoUrl: u.logoUrl ?? null,
       href: menuHref(u.code),
       links: [
         { href: menuHref(u.code), label: "Ringkasan unit", hint: "Angka dan grafik unit ini" },

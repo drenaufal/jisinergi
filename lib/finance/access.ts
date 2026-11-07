@@ -20,6 +20,10 @@ export type UnitInfo = {
   programWeeks: number;
   /** Liga: the day week 1 starts (null = the week of the first real cost). */
   programStartsOn: string | null;
+  /** The unit's logo (an uploaded image URL), if it has one. */
+  logoUrl: string | null;
+  /** Liga: the day the owner marked the event as finished (null = still running). The Liga dividend exists from then on. */
+  leagueFinishedOn: string | null;
   active: boolean;
 };
 
@@ -31,6 +35,8 @@ const unitColumns = {
   description: businessUnits.description,
   programWeeks: businessUnits.programWeeks,
   programStartsOn: businessUnits.programStartsOn,
+  logoUrl: businessUnits.logoUrl,
+  leagueFinishedOn: businessUnits.leagueFinishedOn,
   active: businessUnits.active,
 };
 
