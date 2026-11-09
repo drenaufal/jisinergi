@@ -103,7 +103,7 @@ export async function LigaSummary({ unit }: { unit: UnitInfo }) {
         <CardContent className="space-y-3">
           <BlockTitle
             title="Seberapa jauh anggaran tertutup uang masuk?"
-            hint="Uang masuk dari klub dibandingkan dengan estimasi OPEX di RAB Budget."
+            hint="Uang masuk dari klub dibandingkan dengan Total RAB Budget."
             right={
               <Link href={link("rab")} className="flex shrink-0 items-center gap-1 text-[11px] text-ink-muted hover:text-ink">
                 Lihat RAB Budget <ArrowUpRight className="size-3" />
@@ -121,8 +121,8 @@ export async function LigaSummary({ unit }: { unit: UnitInfo }) {
             {f.budget.total === 0
               ? "Belum ada anggaran (RAB Budget), jadi belum ada pembanding."
               : f.budgetCoverage >= 1
-                ? "Uang masuk sudah menutup seluruh estimasi OPEX."
-                : `Masih kurang ${fmt.rupiah(f.budget.total - f.income)} untuk menutup seluruh estimasi OPEX.`}
+                ? "Uang masuk sudah menutup seluruh Total RAB Budget."
+                : `Masih kurang ${fmt.rupiah(f.budget.total - f.income)} untuk menutup seluruh Total RAB Budget.`}
           </p>
         </CardContent>
       </Card>

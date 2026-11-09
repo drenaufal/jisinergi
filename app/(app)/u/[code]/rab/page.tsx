@@ -91,14 +91,14 @@ export default async function BudgetPage({ params }: { params: Promise<{ code: s
           { term: t("Mingguan"), text: t("Biaya yang keluar setiap minggu pertandingan (sewa lapangan, honor wasit, konsumsi). Dikalikan jumlah minggu program.") },
           { term: t("Bulanan"), text: t("Biaya yang dikeluarkan satu kali (peralatan, hadiah, seragam, publikasi). Dihitung sekali dalam total.") },
           { term: t("Jumlah Satuan × Harga satuan"), text: t("Setiap baris = jumlah satuan (berapa banyak) × harga per satuan. Kolom Total sudah menghitungnya.") },
-          { term: t("Estimasi OPEX"), text: t("OPEX = biaya operasional. Estimasi = total mingguan seluruh program ditambah total bulanan.") },
+          // { term: t("Estimasi OPEX"), text: t("OPEX = biaya operasional. Estimasi = total mingguan seluruh program ditambah total bulanan.") },
           { term: t("Aset / Non aset"), text: t("Baris Aset adalah barang yang akan dimiliki unit; pembelian sebenarnya (biaya actual di RAB Actual) otomatis tercatat di menu Aset. Non aset hanya menjadi anggaran.") },
         ]}
         tip={t("Baris RAB Budget yang sudah disimpan tidak dapat diubah lagi, jadi periksa dulu sebelum menyimpan. Baris bertanda “Aset” masuk ke menu Aset begitu barangnya benar-benar dibeli, yaitu saat biaya actualnya dicatat di menu RAB Actual. Klik nama kategori untuk melipat atau membukanya.")}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label={t("Estimasi OPEX")} value={fmt.rupiahCompact(grand.total)} full={fmt.rupiah(grand.total)} icon={<Calculator className="size-4" />} block="red" hint={t("Mingguan seluruh program + bulanan")} />
+        <Kpi label={t("Total RAB Budget")} value={fmt.rupiahCompact(grand.total)} full={fmt.rupiah(grand.total)} icon={<Calculator className="size-4" />} block="red" hint={t("Mingguan seluruh program + bulanan")} />
         <Kpi label={t("Biaya per minggu")} value={fmt.rupiahCompact(grand.weeklyPerWeek)} full={fmt.rupiah(grand.weeklyPerWeek)} icon={<Repeat className="size-4" />} block="blue" hint={t("Untuk satu minggu pertandingan")} />
         <Kpi
           label={t("Total mingguan")}
@@ -136,7 +136,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ code: s
             </CardHeader>
             <CardContent>
               <ShareDonut
-                centerLabel={t("Estimasi OPEX")}
+                centerLabel={t("Total RAB Budget")}
                 slices={[
                   { label: t("Mingguan (seluruh program)"), value: grand.weeklyProgram, color: "var(--color-chart-1)" },
                   { label: t("Bulanan (sekali)"), value: grand.monthly, color: "var(--color-chart-2)" },
@@ -186,7 +186,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ code: s
               {b.mine.length > 0 && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-night px-5 py-4 text-white">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-night-muted">{t("Total estimasi OPEX")}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-night-muted">{t("Total RAB Budget")}</p>
                     <p className="text-xs text-night-muted">{t("Total mingguan + total bulanan")}</p>
                   </div>
                   <p className="font-display text-3xl tracking-wide tabular-nums">{fmt.rupiah(b.totals.total)}</p>
