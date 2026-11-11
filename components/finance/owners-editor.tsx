@@ -8,7 +8,13 @@ import { MoneyInput } from "@/components/finance/money-input";
 import { BP_TOTAL, bpToField, equalShares, percentToBp } from "@/lib/finance/ownership";
 import { useT } from "@/lib/i18n/client";
 
-export type OwnerRow = { name: string; percent: string; capital?: number | string };
+export type OwnerRow = {
+  name: string;
+  percent: string;
+  capital?: number | string;
+  /** Flag: what this owner takes is counted in the Owner overview (Ringkasan Owner). */
+  overview?: boolean;
+};
 
 type Row = OwnerRow & { key: number };
 
@@ -18,7 +24,7 @@ const make = (row: OwnerRow): Row => ({ ...row, key: ++lastKey });
 
 /**
  * The owners of a unit and what share of its dividend each one gets. It posts repeated `ownerName` /
- * `ownerPercent` (/ `ownerCapital`) fields, which lib/finance/ownership.ts reads and validates on the server.
+ * `ownerPercent` / `ownerOverview` (/ `ownerCapital`) fields, which lib/finance/ownership.ts reads and validates on the server.
  * While nobody has typed a percentage, adding or removing an owner re-splits 100 % equally.
  */
 export function OwnersEditor({
@@ -88,6 +94,19 @@ export function OwnersEditor({
                 <Trash2 className="size-4" />
               </button>
             </div>
+            <label className="flex cursor-pointer items-start gap-2 text-xs text-ink-secondary sm:col-span-3">
+              <input type="hidden" name="ownerOverview" value={r.overview ? "1" : "0"} />
+              <input
+                type="checkbox"
+                checked={!!r.overview}
+                onChange={(e) => patch(r.key, { overview: e.target.checked })}
+                className="mt-0.5 accent-black"
+              />
+              <span>
+                <span className="font-semibold text-ink">{t("Tampilkan di Ringkasan Owner")}</span>
+                <span className="block text-[11px] text-ink-muted">{t("Dividen yang diambil pemilik ini dijumlahkan ke akumulasi dan target di Ringkasan Owner.")}</span>
+              </span>
+            </label>
             {withCapital && (
               <Field label={t("Modal disetor")} hint={t("Opsional. Dicatat di menu Modal.")} className="sm:col-span-3">
                 <MoneyInput name="ownerCapital" defaultValue={r.capital} />

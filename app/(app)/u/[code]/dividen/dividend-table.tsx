@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { CheckCircle2, Loader2, Save } from "lucide-react";
+import { CheckCircle2, Loader2, Save, Star } from "lucide-react";
 import { saveDividendTakenAction } from "../actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,13 +20,15 @@ export type DividendRow = {
   share: number;
   /** What they already took (Rp). */
   taken: number;
+  /** Flag: what they take is counted in the Owner overview. */
+  overview: boolean;
 };
 
 /** Six columns on a wide screen; on a phone every owner is a card with labelled lines. */
 const GRID = "sm:grid-cols-[2rem_minmax(0,1.3fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)]";
 
 /**
- * "Pembagian dividen": one line per owner with the share, what was taken ("Ambil") and what is left ("Dividen final").
+ * "Pembagian dividen": one line per owner with the share, what was taken ("Ambil") and what is left ("Sisa dividen").
  * The Owner can fill in what was taken. Sekolah Bola: any amount, typed in by hand, or the "Ambil semua" checkbox.
  * Liga (`allOrNothing`): only the checkbox — an owner has taken the whole share or nothing.
  * Everyone else (and a Liga whose event is not finished) sees the figures only.
@@ -86,7 +88,7 @@ export function DividendTable({
               </label>
             )}
           </span>
-          <span className="text-right">{t("Dividen final")}</span>
+          <span className="text-right">{t("Sisa dividen")}</span>
         </div>
 
         <ul className="divide-y divide-line">
@@ -102,6 +104,11 @@ export function DividendTable({
                 <div className="flex items-center justify-between gap-2 sm:block">
                   <div className="min-w-0">
                     <span className="font-semibold text-ink sm:font-medium">{r.name}</span>
+                    {r.overview && (
+                      <Badge className="ml-2 align-middle" tone="neutral" title={t("Yang diambil pemilik ini dijumlahkan di Ringkasan Owner")}>
+                        <Star className="size-3" /> {t("Ringkasan Owner")}
+                      </Badge>
+                    )}
                     {generated && amount > 0 && amount >= maxTaken(r.share) && (
                       <Badge className="ml-2 align-middle" tone="success">
                         <CheckCircle2 className="size-3" /> {t("Sudah diambil")}
@@ -151,7 +158,7 @@ export function DividendTable({
                 </div>
 
                 <div className="flex items-baseline justify-between gap-2 sm:block sm:text-right">
-                  {label(t("Dividen final"))}
+                  {label(t("Sisa dividen"))}
                   <span className={cn("font-semibold tabular-nums text-ink", final < 0 && "underline decoration-dotted")}>{fmt.rupiah(final)}</span>
                 </div>
               </li>
@@ -183,7 +190,7 @@ export function DividendTable({
           <p className="text-[11px] text-ink-muted">
             {allOrNothing
               ? t("Dividen Liga hanya bisa diambil seluruhnya: centang pemilik yang uangnya sudah diambil.")
-              : t("Isi jumlah yang sudah diambil tiap pemilik, atau centang “Ambil semua”. Dividen final = bagian dividen − yang diambil.")}
+              : t("Isi jumlah yang sudah diambil tiap pemilik, atau centang “Ambil semua”. Sisa dividen = bagian dividen − yang diambil.")}
           </p>
         </div>
       )}

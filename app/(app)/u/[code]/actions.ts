@@ -157,7 +157,7 @@ export async function saveOwnersAction(unitId: string, _prev: FormState, formDat
       entityId: unitId,
       summary: auditText("Pembagian dividen {unit} diubah: {shares}", {
         unit: unit.name,
-        shares: after.map((o) => `${o.name} ${bpToField(o.shareBp)}%`).join(" · "),
+        shares: after.map((o) => `${o.name} ${bpToField(o.shareBp)}%${o.inOverview ? " (Ringkasan Owner)" : ""}`).join(" · "),
       }),
     });
   } catch (error) {

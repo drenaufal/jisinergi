@@ -27,8 +27,8 @@ Setiap unit punya **pemilik** (boleh lebih dari dua) dengan persentase dividen m
 
 - **Dividen Liga** = (uang modal + uang masuk registrasi + uang masuk match fee) − RAB Actual
 - **Dividen Sekolah Bola (per bulan)** = pemasukan − pengeluaran (**sisa saldo**), dihitung per bulan lalu dijumlahkan
-- **Bagian tiap pemilik** = dividen unit × persentase pemilik itu; **Dividen final** pemilik = bagian − yang sudah diambil (Owner mengisi “Ambil” di menu Dividen; Liga hanya bisa diambil seluruhnya dan baru setelah event liga ditandai selesai)
-- **Akumulasi Owner** = dividen final (yang belum diambil) semua unit Liga yang sudah selesai + semua unit Sekolah Bola, dibandingkan dengan target `DIVIDEND_TARGET` (Rp 3.000.000.000, di `lib/finance/config.ts`)
+- **Bagian tiap pemilik** = dividen unit × persentase pemilik itu; **Sisa dividen** pemilik = bagian − yang sudah diambil (Owner mengisi “Ambil” di menu Dividen; Liga hanya bisa diambil seluruhnya dan baru setelah event liga ditandai selesai)
+- **Akumulasi Owner** = jumlah dividen yang sudah diambil oleh pemilik bertanda “Ringkasan Owner” (dicentang di menu Dividen → Ubah pembagian) dari semua unit Liga dan Sekolah Bola, dibandingkan dengan target `DIVIDEND_TARGET` (Rp 3.000.000.000, di `lib/finance/config.ts`)
 
 Detail dan keputusan baca data: [docs/finance.md](docs/finance.md).
 

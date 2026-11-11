@@ -82,7 +82,7 @@ async function main() {
     } catch (e) {
       ok(e instanceof UnitRuleError, "unit: a taken code is refused");
     }
-    const swapped = await replaceUnitOwners(t, liga.id, [{ name: "Pemilik A", shareBp: 5000 }, { name: "Pemilik C", shareBp: 5000 }]);
+    const swapped = await replaceUnitOwners(t, liga.id, [{ name: "Pemilik A", shareBp: 5000, inOverview: false }, { name: "Pemilik C", shareBp: 5000, inOverview: false }]);
     eq2(swapped.before.map((o) => o.shareBp), [6000, 4000], "owners: the old shares are reported");
     eq2((await listOwners(liga.id)).map((o) => [o.name, o.shareBp]), [["Pemilik A", 5000], ["Pemilik C", 5000]], "owners: the Dividen page rewrites the shares");
 
@@ -294,13 +294,15 @@ async function main() {
     const afterTake = (await getAllUnitFigures([{ id: liga.id, type: "liga", programWeeks: 10, leagueFinishedOn: "2026-11-07" }])).get(liga.id)!;
     eq2([afterTake.payout.generated, afterTake.payout.taken, afterTake.payout.final], [true, ligaShare, ligaDividendNow - ligaShare], "Dividen: once finished, the Owner overview counts the dividend minus what was taken");
     await rejectsUnit(setLeagueFinished(t, liga.id, false), "Dividen: a league whose dividend was taken cannot be reopened", /sudah diambil/);
-    await replaceUnitOwners(t, liga.id, [{ name: "Pemilik A", shareBp: 5000 }, { name: "Pemilik B", shareBp: 5000 }]);
+    await replaceUnitOwners(t, liga.id, [{ name: "Pemilik A", shareBp: 5000, inOverview: true }, { name: "Pemilik B", shareBp: 5000, inOverview: false }]);
     eq2((await listOwners(liga.id)).map((o) => [o.name, o.takenAmount]), [["Pemilik A", ligaShare], ["Pemilik B", 0]], "Dividen: rewriting the owner shares keeps what each owner took");
-    await rejectsUnit(replaceUnitOwners(t, liga.id, [{ name: "Pemilik B", shareBp: 10000 }]), "Dividen: an owner who took money cannot be removed", /sudah mengambil/);
+    const flagged = (await getAllUnitFigures([{ id: liga.id, type: "liga", programWeeks: 10, leagueFinishedOn: "2026-11-07" }])).get(liga.id)!;
+    eq2([(await listOwners(liga.id)).map((o) => o.inOverview), flagged.payout.overview], [[true, false], ligaShare], "Dividen: the Owner overview counts only what the flagged owner took");
+    await rejectsUnit(replaceUnitOwners(t, liga.id, [{ name: "Pemilik B", shareBp: 10000, inOverview: false }]), "Dividen: an owner who took money cannot be removed", /sudah mengambil/);
     // the owner rows are rewritten with new ids whenever the shares are edited, so read them again
     await saveDividendTaken(t, liga.id, new Map([[(await listOwners(liga.id))[0].id, 0]]));
     eq2((await listOwners(liga.id)).map((o) => o.takenAmount), [0, 0], "Dividen: a withdrawal can be undone");
-    eq2(dividendFinal(1000, 300).final, 700, "Dividen: dividen final = dividend − taken");
+    eq2(dividendFinal(1000, 300).final, 700, "Dividen: sisa dividen = dividend − taken");
     eq2(dividendFinal(1000, 0, false).final, 0, "Dividen: not generated counts 0");
 
     // Sekolah Bola: any amount up to the share

@@ -86,7 +86,7 @@ export default async function BusinessUnitsPage() {
                       </p>
                       <p className="mt-1 text-xs text-ink-muted">
                         <span className="font-semibold text-ink">Kepemilikan:</span>{" "}
-                        {unitOwners.length ? unitOwners.map((o) => `${o.name} ${bpToField(o.shareBp)}%`).join(" · ") : "belum diatur — isi di menu Dividen unit ini"}
+                        {unitOwners.length ? unitOwners.map((o) => `${o.name} ${bpToField(o.shareBp)}%${o.inOverview ? " ★" : ""}`).join(" · ") : "belum diatur — isi di menu Dividen unit ini"}
                       </p>
                       </div>
                     </div>

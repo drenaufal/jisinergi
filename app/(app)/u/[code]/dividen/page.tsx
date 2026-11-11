@@ -4,7 +4,7 @@ import { can } from "@/lib/auth/rbac";
 import { loadUnitPage } from "@/lib/finance/access";
 import { ligaDataset, listOwners, schoolDataset } from "@/lib/finance/queries";
 import { schoolFigures, unitFigures } from "@/lib/finance/calc";
-import { BP_TOTAL, bpToField, ownerPayouts } from "@/lib/finance/ownership";
+import { BP_TOTAL, bpToField, overviewTaken, ownerPayouts } from "@/lib/finance/ownership";
 import { menuHref } from "@/lib/finance/unit-types";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,10 +51,12 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
   const totalBp = owners.reduce((sum, o) => sum + o.shareBp, 0);
   const balanced = totalBp === BP_TOTAL;
   const biggest = rows.reduce<(typeof rows)[number] | null>((top, r) => (!top || r.owner.shareBp > top.owner.shareBp ? r : top), null);
-  const editorRows = owners.map((o) => ({ name: o.name, percent: bpToField(o.shareBp) }));
+  const editorRows = owners.map((o) => ({ name: o.name, percent: bpToField(o.shareBp), overview: o.inOverview }));
   const takenTotal = owners.reduce((sum, o) => sum + o.takenAmount, 0);
   const finalTotal = dividend - takenTotal;
-  const tableRows = owners.map((o, i) => ({ id: o.id, name: o.name, shareBp: o.shareBp, share: payouts[i].share, taken: o.takenAmount }));
+  const overviewTotal = overviewTaken(owners);
+  const flagged = owners.filter((o) => o.inOverview);
+  const tableRows = owners.map((o, i) => ({ id: o.id, name: o.name, shareBp: o.shareBp, share: payouts[i].share, taken: o.takenAmount, overview: o.inOverview }));
 
   const lines: FormulaLine[] = ligaFigures
     ? [
@@ -91,7 +93,8 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
           { term: t("Persentase"), text: t("Bagian setiap pemilik dari dividen. Totalnya harus 100%. Hanya Owner yang dapat mengubahnya.") },
           { term: t("Bagian dividen"), text: t("Dividen dikali persentase pemilik itu. Dibulatkan ke rupiah penuh dan selalu berjumlah sama dengan dividen.") },
           { term: t("Ambil"), text: isLiga ? t("Uang bagian dividen yang sudah diambil pemilik. Dividen Liga hanya bisa diambil seluruhnya, dan baru setelah event liga selesai.") : t("Uang bagian dividen yang sudah diambil pemilik. Bisa diisi berapa saja, atau centang “Ambil semua”. Hanya Owner yang dapat mengisinya.") },
-          { term: t("Dividen final"), text: t("Bagian dividen dikurangi yang sudah diambil, yaitu dividen yang belum diambil. Angka inilah yang dijumlahkan di Ringkasan Owner.") },
+          { term: t("Sisa dividen"), text: t("Bagian dividen dikurangi yang sudah diambil, yaitu dividen yang belum diambil.") },
+          { term: t("Tanda Ringkasan Owner"), text: t("Pemilik bertanda “Ringkasan Owner”: dividen yang sudah diambilnya dijumlahkan ke akumulasi dan target di Ringkasan Owner. Tanda diatur Owner lewat “Ubah pembagian”.") },
         ]}
       />
 
@@ -106,7 +109,7 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
             </p>
             <p className="mt-0.5 text-xs text-ink-muted">
               {unit.leagueFinishedOn
-                ? t("Pemilik bisa mengambil bagiannya, dan dividen ini dihitung di Ringkasan Owner (sebesar yang belum diambil).")
+                ? t("Pemilik bisa mengambil bagiannya. Yang diambil pemilik bertanda “Ringkasan Owner” dijumlahkan di Ringkasan Owner.")
                 : canEdit
                   ? t("Angka di bawah masih perkiraan: belum bisa diambil dan belum dihitung di Ringkasan Owner. Tandai selesai bila event liga sudah berakhir.")
                   : t("Angka di bawah masih perkiraan. Owner menandai event selesai setelah liga berakhir; sejak itu dividen bisa diambil.")}
@@ -129,21 +132,28 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
               ? t("Hasil negatif: RAB Actual sudah melebihi uang modal, registrasi, dan match fee bersama-sama. Bagian tiap pemilik juga negatif.")
               : t("Hasil negatif: pengeluaran lebih besar dari pemasukan. Bagian tiap pemilik juga negatif.")
             : generated
-              ? t("Dari hasil ini, yang belum diambil pemilik (dividen final) ikut dijumlahkan ke akumulasi dividen Owner.")
+              ? t("Dari hasil ini, yang sudah diambil pemilik bertanda “Ringkasan Owner” ikut dijumlahkan ke akumulasi dividen Owner.")
               : t("Belum dijumlahkan ke akumulasi dividen Owner sampai event liga ditandai selesai.")
         }
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <Kpi label={generated ? t("Dividen (rumus)") : t("Dividen (perkiraan)")} value={fmt.rupiahCompact(dividend)} full={fmt.rupiah(dividend)} icon={<Calculator className="size-4" />} block="red" hint={isLiga ? t("(modal + registrasi + match fee) − RAB Actual") : t("Pemasukan − pengeluaran")} />
-        <Kpi label={t("Sudah diambil")} value={fmt.rupiahCompact(takenTotal)} full={fmt.rupiah(takenTotal)} icon={<Wallet className="size-4" />} block="blue" hint={t("Oleh semua pemilik")} />
         <Kpi
-          label={t("Dividen final")}
+          label={t("Sudah diambil")}
+          value={fmt.rupiahCompact(takenTotal)}
+          full={fmt.rupiah(takenTotal)}
+          icon={<Wallet className="size-4" />}
+          block="blue"
+          hint={flagged.length ? t("{amount} ke Ringkasan Owner ({names})", { amount: fmt.rupiahCompact(overviewTotal), names: flagged.map((o) => o.name).join(", ") }) : t("Belum ada pemilik bertanda Ringkasan Owner")}
+        />
+        <Kpi
+          label={t("Sisa dividen")}
           value={generated ? fmt.rupiahCompact(finalTotal) : "—"}
           full={generated ? fmt.rupiah(finalTotal) : undefined}
           icon={<HandCoins className="size-4" />}
           block="night"
-          hint={generated ? t("Belum diambil — dihitung di Ringkasan Owner") : t("Terbentuk setelah event liga selesai")}
+          hint={generated ? t("Belum diambil oleh pemilik") : t("Terbentuk setelah event liga selesai")}
         />
         <Kpi label={t("Jumlah pemilik")} value={fmt.number(owners.length)} icon={<Users className="size-4" />} block="white" hint={owners.length ? owners.map((o) => o.name).join(", ") : t("Belum diatur")} />
         <Kpi

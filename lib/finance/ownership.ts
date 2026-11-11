@@ -53,7 +53,7 @@ export function splitByShares(total: number, shares: readonly number[]): number[
 
 /* ── Pengambilan dividen (dividend taken) ────────────────────────────── */
 
-/** One owner's dividend: the share, what was already taken, and what is left ("dividen final"). */
+/** One owner's dividend: the share, what was already taken, and what is left ("sisa dividen"). */
 export type OwnerPayout = { share: number; taken: number; final: number };
 
 /** Each owner's share of `dividend` (exact, see splitByShares) next to what they already took. */
@@ -66,17 +66,21 @@ export function ownerPayouts(dividend: number, owners: readonly { shareBp: numbe
 export const maxTaken = (share: number) => Math.max(0, share);
 
 /**
- * What a unit's dividend comes to once the withdrawals are subtracted: dividend − everything taken.
- * This "dividen final" is the figure the Owner overview adds up. A Liga whose event is not finished has
- * no dividend yet, so it counts as 0 there (`generated` = false).
+ * What a unit's dividend comes to once the withdrawals are subtracted: dividend − everything taken ("sisa dividen").
+ * `overview` is what the Owner overview adds up: only what the owners flagged "Ringkasan Owner" have taken.
+ * A Liga whose event is not finished has no dividend yet, so its sisa counts as 0 (`generated` = false).
  */
-export function dividendFinal(dividend: number, taken: number, generated = true) {
-  return { dividend, taken, generated, final: generated ? dividend - taken : 0 };
+export function dividendFinal(dividend: number, taken: number, generated = true, overview = 0) {
+  return { dividend, taken, generated, final: generated ? dividend - taken : 0, overview };
 }
+
+/** What the owners flagged for the Owner overview have taken out of one unit. */
+export const overviewTaken = (owners: readonly { takenAmount: number; inOverview: boolean }[]) =>
+  owners.reduce((total, o) => total + (o.inOverview ? o.takenAmount : 0), 0);
 
 /* ── Validation of the owners typed into a form ─────────────────────── */
 
-export type OwnerInput = { name: string; shareBp: number; capital: number };
+export type OwnerInput = { name: string; shareBp: number; capital: number; inOverview: boolean };
 
 const rupiahDigits = (v: unknown) => {
   if (typeof v === "number") return v;
@@ -85,12 +89,13 @@ const rupiahDigits = (v: unknown) => {
   return d === "" ? 0 : Number(d);
 };
 
-/** The owner rows a form posts as repeated `ownerName` / `ownerPercent` / `ownerCapital` fields. */
+/** The owner rows a form posts as repeated `ownerName` / `ownerPercent` / `ownerCapital` / `ownerOverview` ("1" or "0") fields. */
 export function readOwnerRows(formData: FormData) {
   const names = formData.getAll("ownerName").map(String);
   const percents = formData.getAll("ownerPercent").map(String);
   const capitals = formData.getAll("ownerCapital").map(String);
-  return names.map((name, i) => ({ name, percent: percents[i] ?? "", capital: capitals[i] ?? "" }));
+  const flags = formData.getAll("ownerOverview").map(String);
+  return names.map((name, i) => ({ name, percent: percents[i] ?? "", capital: capitals[i] ?? "", overview: flags[i] === "1" }));
 }
 
 /**
@@ -111,6 +116,7 @@ export const ownersSchema = (t: TFunction) =>
           return bp;
         }),
         capital: z.unknown().transform(rupiahDigits),
+        overview: z.boolean().optional().default(false),
       }),
       t("Isi minimal satu pemilik"),
     )
@@ -124,4 +130,4 @@ export const ownersSchema = (t: TFunction) =>
         ctx.addIssue({ code: "custom", message: t("Total persentase harus tepat 100% (sekarang {total}%)", { total: bpToField(total) }) });
       }
     })
-    .transform((rows): OwnerInput[] => rows.map((r) => ({ name: r.name, shareBp: r.percent, capital: r.capital })));
+    .transform((rows): OwnerInput[] => rows.map((r) => ({ name: r.name, shareBp: r.percent, capital: r.capital, inOverview: r.overview })));

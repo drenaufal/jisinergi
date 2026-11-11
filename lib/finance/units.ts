@@ -35,7 +35,7 @@ export class UnitRuleError extends Error {
 
 const ownerRows = (
   unitId: string,
-  owners: readonly Pick<OwnerInput, "name" | "shareBp">[],
+  owners: readonly Pick<OwnerInput, "name" | "shareBp" | "inOverview">[],
   /** What each owner (by lower-case name) already took, kept when the owners are rewritten. */
   taken: ReadonlyMap<string, { takenAmount: number; takenOn: string | null }> = new Map(),
 ) =>
@@ -47,6 +47,7 @@ const ownerRows = (
     position: i + 1,
     takenAmount: taken.get(o.name.toLowerCase())?.takenAmount ?? 0,
     takenOn: taken.get(o.name.toLowerCase())?.takenOn ?? null,
+    inOverview: o.inOverview,
   }));
 
 /**
@@ -79,11 +80,11 @@ export async function createUnit(t: TFunction, input: z.output<ReturnType<typeof
 }
 
 /** Replaces a unit's owners and shares (the owner list is small, so it is rewritten as a whole). */
-export async function replaceUnitOwners(t: TFunction, unitId: string, owners: readonly Pick<OwnerInput, "name" | "shareBp">[]) {
+export async function replaceUnitOwners(t: TFunction, unitId: string, owners: readonly Pick<OwnerInput, "name" | "shareBp" | "inOverview">[]) {
   const [unit] = await db.select({ id: businessUnits.id, name: businessUnits.name }).from(businessUnits).where(eq(businessUnits.id, unitId));
   if (!unit) throw new UnitRuleError(t("Unit bisnis tidak ditemukan."));
   const before = await db
-    .select({ name: finUnitOwners.name, shareBp: finUnitOwners.shareBp, takenAmount: finUnitOwners.takenAmount, takenOn: finUnitOwners.takenOn })
+    .select({ name: finUnitOwners.name, shareBp: finUnitOwners.shareBp, takenAmount: finUnitOwners.takenAmount, takenOn: finUnitOwners.takenOn, inOverview: finUnitOwners.inOverview })
     .from(finUnitOwners)
     .where(eq(finUnitOwners.businessUnitId, unitId))
     .orderBy(asc(finUnitOwners.position));
@@ -100,7 +101,7 @@ export async function replaceUnitOwners(t: TFunction, unitId: string, owners: re
     await tx.delete(finUnitOwners).where(eq(finUnitOwners.businessUnitId, unitId));
     await tx.insert(finUnitOwners).values(ownerRows(unitId, owners, taken));
   });
-  return { unit, before, after: owners.map((o) => ({ name: o.name, shareBp: o.shareBp })) };
+  return { unit, before, after: owners.map((o) => ({ name: o.name, shareBp: o.shareBp, inOverview: o.inOverview })) };
 }
 
 export async function updateUnit(t: TFunction, id: string, input: z.output<ReturnType<typeof makeEditUnitSchema>>) {
@@ -164,7 +165,7 @@ export async function updateUnitLogin(t: TFunction, userId: string, input: z.out
 /** Every unit's owners with their shares, in the order they were entered. */
 export async function listUnitOwners() {
   return db
-    .select({ unitId: finUnitOwners.businessUnitId, name: finUnitOwners.name, shareBp: finUnitOwners.shareBp })
+    .select({ unitId: finUnitOwners.businessUnitId, name: finUnitOwners.name, shareBp: finUnitOwners.shareBp, inOverview: finUnitOwners.inOverview })
     .from(finUnitOwners)
     .orderBy(asc(finUnitOwners.position), asc(finUnitOwners.createdAt));
 }

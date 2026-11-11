@@ -156,10 +156,12 @@ export const finUnitOwners = mysqlTable(
     name: varchar("name", { length: 120 }).notNull(),
     shareBp: int("share_bp").notNull(),
     position: int("position").notNull().default(0),
-    /** Rupiah of this owner's dividend share already taken. "Dividen final" = share − taken. */
+    /** Rupiah of this owner's dividend share already taken. "Sisa dividen" = share − taken. */
     takenAmount: rupiah("taken_amount").notNull().default(0),
     /** The day the last withdrawal was entered. */
     takenOn: date("taken_on"),
+    /** Flag: what this owner takes is counted in the Owner overview (Ringkasan Owner) and its target. */
+    inOverview: boolean("in_overview").notNull().default(false),
     createdAt: timestamp("created_at").default(NOW).notNull(),
   },
   (t) => [index("fin_unit_owners_unit_idx").on(t.businessUnitId, t.position)],

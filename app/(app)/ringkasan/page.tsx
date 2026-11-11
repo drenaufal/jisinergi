@@ -4,6 +4,7 @@ import { ArrowUpRight, Building2, Landmark, Package, Target, Wallet } from "luci
 import { requireCapability } from "@/lib/auth/session";
 import { listVisibleUnits } from "@/lib/finance/access";
 import { getAllUnitFigures } from "@/lib/finance/queries";
+import { listUnitOwners } from "@/lib/finance/units";
 import { DIVIDEND_TARGET } from "@/lib/finance/config";
 import { ligaDividend, ownerDividend, sum } from "@/lib/finance/calc";
 import { UNIT_TYPE_LABEL, menuHref } from "@/lib/finance/unit-types";
@@ -27,7 +28,10 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
   const { fmt } = await getI18n();
   const sp = await searchParams;
   const units = await listVisibleUnits(user);
-  const figures = await getAllUnitFigures(units);
+  const [figures, allOwners] = await Promise.all([getAllUnitFigures(units), listUnitOwners()]);
+  const unitIds = new Set(units.map((u) => u.id));
+  // the owners flagged "Ringkasan Owner": only what they took is counted below
+  const flaggedNames = [...new Set(allOwners.filter((o) => o.inOverview && unitIds.has(o.unitId)).map((o) => o.name))];
 
   const selected = units.find((u) => u.code.toLowerCase() === sp.unit?.toLowerCase()) ?? null;
   const pool = selected ? units.filter((u) => u.id === selected.id) : units;
@@ -37,16 +41,17 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
   const liga = (list: typeof units) => list.flatMap((u) => { const f = figures.get(u.id); return f?.type === "liga" ? [{ unit: u, f: f.figures, payout: f.payout }] : []; });
   const school = (list: typeof units) => list.flatMap((u) => { const f = figures.get(u.id); return f?.type === "sekolah_bola" ? [{ unit: u, f: f.figures, payout: f.payout }] : []; });
 
-  // The target is always about everything, whatever the filter says. What counts is the dividend final: what the owners
-  // have not taken yet (a Liga whose event is not finished has no dividend yet, so it counts 0).
+  // The target is always about everything, whatever the filter says. What counts is what the owners flagged
+  // "Ringkasan Owner" (menu Dividen → Ubah pembagian) have taken out of every Liga and Sekolah Bola unit.
   const allLiga = liga(ligaUnits);
   const allSchool = school(schoolUnits);
   const owner = ownerDividend({
-    liga: sum(allLiga, (x) => x.payout.final),
-    sekolahBola: sum(allSchool, (x) => x.payout.final),
+    liga: sum(allLiga, (x) => x.payout.overview),
+    sekolahBola: sum(allSchool, (x) => x.payout.overview),
     target: DIVIDEND_TARGET,
   });
-  const takenAll = sum([...allLiga, ...allSchool], (x) => x.payout.taken);
+  // sisa dividen: what nobody has taken yet (a Liga whose event is not finished has none yet)
+  const sisaAll = sum([...allLiga, ...allSchool], (x) => x.payout.final);
 
   // The explanations follow the filter.
   const shownLiga = liga(pool);
@@ -80,8 +85,14 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
     generated: sum(shownLiga.filter((x) => x.payout.generated), (x) => x.payout.dividend),
     taken: sum(shownLiga, (x) => x.payout.taken),
     final: sum(shownLiga, (x) => x.payout.final),
+    overview: sum(shownLiga, (x) => x.payout.overview),
   };
-  const schoolPaid = { generated: sum(shownSchool, (x) => x.payout.dividend), taken: sum(shownSchool, (x) => x.payout.taken), final: sum(shownSchool, (x) => x.payout.final) };
+  const schoolPaid = {
+    generated: sum(shownSchool, (x) => x.payout.dividend),
+    taken: sum(shownSchool, (x) => x.payout.taken),
+    final: sum(shownSchool, (x) => x.payout.final),
+    overview: sum(shownSchool, (x) => x.payout.overview),
+  };
 
   const monthMap = new Map<string, { income: number; expense: number }>();
   for (const { f } of shownSchool) {
@@ -104,7 +115,7 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
 
   return (
     <div>
-      <PageHeader title="Ringkasan Owner" description="Dividen seluruh unit bisnis, diakumulasikan terhadap target. Liga dan Sekolah Bola dijelaskan terpisah." />
+      <PageHeader title="Ringkasan Owner" description="Dividen yang diambil pemilik bertanda dari seluruh unit bisnis, diakumulasikan terhadap target. Liga dan Sekolah Bola dijelaskan terpisah." />
 
       {units.length === 0 ? (
         <EmptyState
@@ -120,13 +131,20 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
             <div className="grid gap-px bg-black lg:grid-cols-[1.4fr_1fr]">
               <div className="bg-white p-6">
                 <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
-                  <Target className="size-3.5" /> Akumulasi dividen yang belum diambil — semua unit
+                  <Target className="size-3.5" /> Akumulasi dividen yang diambil pemilik bertanda — semua unit
                 </p>
                 <p className="mt-3 text-[clamp(2rem,4.4vw,3.4rem)] font-semibold leading-none tracking-tight tabular-nums text-ink" title={fmt.rupiah(owner.accumulated)}>
                   {fmt.rupiah(owner.accumulated)}
                 </p>
                 <p className="mt-2 text-sm text-ink-muted">
-                  dari target <span className="font-semibold text-ink">{fmt.rupiah(owner.target)}</span> (3 M){takenAll > 0 && <> · {fmt.rupiah(takenAll)} sudah diambil</>}
+                  dari target <span className="font-semibold text-ink">{fmt.rupiah(owner.target)}</span> (3 M){sisaAll !== 0 && <> · {fmt.rupiah(sisaAll)} sisa dividen belum diambil</>}
+                </p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  {flaggedNames.length ? (
+                    <>Pemilik bertanda: <span className="font-semibold text-ink">{flaggedNames.join(", ")}</span></>
+                  ) : (
+                    <>Belum ada pemilik bertanda “Ringkasan Owner”. Tandai pemilik di menu Dividen unit → Ubah pembagian.</>
+                  )}
                 </p>
 
                 <div className="mt-6" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(owner.progress * 100)} aria-label="Progres menuju target dividen">
@@ -161,25 +179,26 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
           </section>
 
           <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-            <Kpi label="Dividen Liga" value={fmt.rupiahCompact(owner.liga)} full={fmt.rupiah(owner.liga)} block="red" hint={`Belum diambil · ${fmt.number(ligaUnits.length)} unit Liga`} />
-            <Kpi label="Dividen Sekolah Bola" value={fmt.rupiahCompact(owner.sekolahBola)} full={fmt.rupiah(owner.sekolahBola)} block="blue" hint={`Belum diambil · ${fmt.number(schoolUnits.length)} unit Sekolah Bola`} />
-            <Kpi label="Sudah diambil" value={fmt.rupiahCompact(takenAll)} full={fmt.rupiah(takenAll)} icon={<Wallet className="size-4" />} block="night" hint="Dividen yang sudah diambil pemilik, tidak dihitung ke target" />
+            <Kpi label="Dividen Liga" value={fmt.rupiahCompact(owner.liga)} full={fmt.rupiah(owner.liga)} block="red" hint={`Diambil pemilik bertanda · ${fmt.number(ligaUnits.length)} unit Liga`} />
+            <Kpi label="Dividen Sekolah Bola" value={fmt.rupiahCompact(owner.sekolahBola)} full={fmt.rupiah(owner.sekolahBola)} block="blue" hint={`Diambil pemilik bertanda · ${fmt.number(schoolUnits.length)} unit Sekolah Bola`} />
+            <Kpi label="Sisa dividen" value={fmt.rupiahCompact(sisaAll)} full={fmt.rupiah(sisaAll)} icon={<Wallet className="size-4" />} block="night" hint="Belum diambil pemilik, tidak dihitung ke target" />
             <Kpi label="Total modal" value={fmt.rupiahCompact(capitalAll)} full={fmt.rupiah(capitalAll)} icon={<Landmark className="size-4" />} block="white" hint={`Liga ${fmt.rupiahCompact(capitalLigaAll)} · Sekolah Bola ${fmt.rupiahCompact(capitalSchoolAll)}`} />
             <Kpi label="Total aset" value={fmt.rupiahCompact(assetsAll)} full={fmt.rupiah(assetsAll)} icon={<Package className="size-4" />} block="yellow" hint={`Liga ${fmt.rupiahCompact(assetsLigaAll)} · Sekolah Bola ${fmt.rupiahCompact(assetsSchoolAll)}`} />
-            <Kpi label="Target" value="Rp 3 M" full={fmt.rupiah(owner.target)} block="white" hint="Dividen final Liga + Sekolah Bola" />
+            <Kpi label="Target" value="Rp 3 M" full={fmt.rupiah(owner.target)} block="white" hint="Diambil pemilik bertanda, Liga + Sekolah Bola" />
           </div>
 
           <div className="mt-8">
             <GuideCard
               id="owner"
               title="Cara membaca ringkasan Owner"
-              intro="Bagian atas menjumlahkan dividen semua unit yang belum diambil pemilik (dividen final) dan membandingkannya dengan target. Di bawahnya, dividen Liga dan dividen Sekolah Bola dijelaskan sendiri-sendiri karena rumusnya berbeda, disusul akumulasi modal dan aset. Filter unit hanya mempengaruhi tabel per unit, bukan angka target maupun total modal dan aset."
+              intro="Bagian atas menjumlahkan dividen yang sudah diambil pemilik bertanda “Ringkasan Owner” dari semua unit, lalu membandingkannya dengan target. Di bawahnya, dividen Liga dan dividen Sekolah Bola dijelaskan sendiri-sendiri karena rumusnya berbeda, disusul akumulasi modal dan aset. Filter unit hanya mempengaruhi tabel per unit, bukan angka target maupun total modal dan aset."
               terms={[
                 { term: "Dividen Liga", text: "(Uang modal + uang masuk registrasi + uang masuk match fee) − RAB Actual, dihitung per unit Liga." },
                 { term: "Dividen Sekolah Bola", text: "Pemasukan − pengeluaran, dihitung per bulan lalu dijumlahkan, per unit Sekolah Bola." },
-                { term: "Dividen final", text: "Dividen unit dikurangi yang sudah diambil pemilik (diisi di menu Dividen unit). Hanya dividen final yang dijumlahkan ke akumulasi." },
+                { term: "Pemilik bertanda", text: "Pemilik yang dicentang “Tampilkan di Ringkasan Owner” di menu Dividen unit → Ubah pembagian. Hanya dividen yang diambil pemilik inilah yang dijumlahkan ke akumulasi." },
+                { term: "Sisa dividen", text: "Dividen unit dikurangi yang sudah diambil semua pemilik (diisi di menu Dividen unit). Hanya informasi, tidak dihitung ke target." },
                 { term: "Dividen Liga baru dihitung setelah event selesai", text: "Dividen sebuah unit Liga baru terbentuk, bisa diambil, dan ikut dihitung di sini setelah Owner menandai event liga-nya selesai." },
-                { term: "Akumulasi", text: "Dividen final Liga ditambah dividen final Sekolah Bola dari semua unit." },
+                { term: "Akumulasi", text: "Dividen Liga ditambah dividen Sekolah Bola yang sudah diambil pemilik bertanda, dari semua unit." },
                 { term: "Total modal", text: "Uang yang disetor pemilik ke semua unit, Liga dan Sekolah Bola, dari menu Modal masing-masing unit. Tidak ikut mengubah dividen Sekolah Bola." },
                 { term: "Total aset", text: "Nilai seluruh aset dari semua unit, Liga dan Sekolah Bola. Aset berasal dari menu Aset, baris RAB bertanda Aset, dan pengeluaran Sekolah Bola bertanda Aset." },
               ]}
@@ -214,7 +233,8 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                         <dl className="space-y-1">
                           <div className="flex justify-between gap-3"><dt>Dividen unit yang event-nya selesai</dt><dd className="tabular-nums text-ink">{fmt.rupiah(ligaPaid.generated)}</dd></div>
                           <div className="flex justify-between gap-3"><dt>− Sudah diambil pemilik</dt><dd className="tabular-nums text-ink">{fmt.rupiah(ligaPaid.taken)}</dd></div>
-                          <div className="flex justify-between gap-3 border-t border-line pt-1 font-semibold text-ink"><dt>= Dividen final (dihitung ke target)</dt><dd className="tabular-nums">{fmt.rupiah(ligaPaid.final)}</dd></div>
+                          <div className="flex justify-between gap-3 border-t border-line pt-1 text-ink"><dt>= Sisa dividen</dt><dd className="tabular-nums">{fmt.rupiah(ligaPaid.final)}</dd></div>
+                          <div className="flex justify-between gap-3 border-t border-line pt-1 font-semibold text-ink"><dt>Diambil pemilik bertanda (dihitung ke target)</dt><dd className="tabular-nums">{fmt.rupiah(ligaPaid.overview)}</dd></div>
                           {ligaOpen.length > 0 && <p className="pt-1 text-ink-muted">{fmt.number(ligaOpen.length)} unit Liga belum selesai ({ligaOpen.map((x) => x.unit.name).join(", ")}): dividennya belum terbentuk, jadi belum dihitung.</p>}
                         </dl>
                       }
@@ -232,7 +252,8 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                               <TH className="text-right">RAB Actual</TH>
                               <TH className="text-right">Dividen</TH>
                               <TH className="text-right">Diambil</TH>
-                              <TH className="text-right">Dividen final</TH>
+                              <TH className="text-right">Sisa dividen</TH>
+                              <TH className="text-right">Ke Ringkasan</TH>
                             </TR>
                           </THead>
                           <TBody>
@@ -252,7 +273,8 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                                   {!payout.generated && <Badge className="ml-2 align-middle" tone="warn">Belum selesai</Badge>}
                                 </TD>
                                 <TD className="text-right tabular-nums">{fmt.rupiahCompact(payout.taken)}</TD>
-                                <TD className="text-right font-semibold tabular-nums text-ink">{payout.generated ? fmt.rupiahCompact(payout.final) : "—"}</TD>
+                                <TD className="text-right tabular-nums">{payout.generated ? fmt.rupiahCompact(payout.final) : "—"}</TD>
+                                <TD className="text-right font-semibold tabular-nums text-ink">{fmt.rupiahCompact(payout.overview)}</TD>
                               </TR>
                             ))}
                           </TBody>
@@ -286,7 +308,8 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                           <dl className="space-y-1">
                             <div className="flex justify-between gap-3"><dt>Sisa saldo (dividen)</dt><dd className="tabular-nums text-ink">{fmt.rupiah(schoolPaid.generated)}</dd></div>
                             <div className="flex justify-between gap-3"><dt>− Sudah diambil pemilik</dt><dd className="tabular-nums text-ink">{fmt.rupiah(schoolPaid.taken)}</dd></div>
-                            <div className="flex justify-between gap-3 border-t border-line pt-1 font-semibold text-ink"><dt>= Dividen final (dihitung ke target)</dt><dd className="tabular-nums">{fmt.rupiah(schoolPaid.final)}</dd></div>
+                            <div className="flex justify-between gap-3 border-t border-line pt-1 text-ink"><dt>= Sisa dividen</dt><dd className="tabular-nums">{fmt.rupiah(schoolPaid.final)}</dd></div>
+                            <div className="flex justify-between gap-3 border-t border-line pt-1 font-semibold text-ink"><dt>Diambil pemilik bertanda (dihitung ke target)</dt><dd className="tabular-nums">{fmt.rupiah(schoolPaid.overview)}</dd></div>
                           </dl>
                         }
                       />
@@ -304,7 +327,8 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                                 <TH className="text-right">Pengeluaran</TH>
                                 <TH className="text-right">Dividen</TH>
                                 <TH className="text-right">Diambil</TH>
-                                <TH className="text-right">Dividen final</TH>
+                                <TH className="text-right">Sisa dividen</TH>
+                                <TH className="text-right">Ke Ringkasan</TH>
                               </TR>
                             </THead>
                             <TBody>
@@ -320,7 +344,8 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                                   <TD className="text-right tabular-nums">{fmt.rupiahCompact(f.expense)}</TD>
                                   <TD className="text-right tabular-nums text-ink-secondary">{fmt.rupiahCompact(f.dividend)}</TD>
                                   <TD className="text-right tabular-nums">{fmt.rupiahCompact(payout.taken)}</TD>
-                                  <TD className="text-right font-semibold tabular-nums text-ink">{fmt.rupiahCompact(payout.final)}</TD>
+                                  <TD className="text-right tabular-nums">{fmt.rupiahCompact(payout.final)}</TD>
+                                  <TD className="text-right font-semibold tabular-nums text-ink">{fmt.rupiahCompact(payout.overview)}</TD>
                                 </TR>
                               ))}
                             </TBody>
