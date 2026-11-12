@@ -38,9 +38,16 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   return { id: account.id, name: account.name, email: account.email, role: account.role, title: account.title, unitId };
 });
 
+/** Query flag on /login: the session cookie is valid but its account is unusable here; proxy.ts clears the cookie. */
+export const STALE_SESSION_PARAM = "sesi";
+
 export async function requireUser() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) {
+    // A signed cookie whose account is missing or inactive in this database (e.g. after switching DATABASE_URL)
+    // must not go to plain /login: proxy.ts would send a signed-in visitor straight back to "/", a redirect loop.
+    redirect((await auth()) ? `/login?${STALE_SESSION_PARAM}=habis` : "/login");
+  }
   return user;
 }
 
