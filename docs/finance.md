@@ -41,11 +41,15 @@ bisa disimpan di jenis unit yang salah (ditolak di server, bukan hanya disembuny
 - Menu **Dividen** (Liga dan Sekolah Bola) menampilkan rumus dividen, lalu tabel pemilik: nama, persentase, bagian dividen.
   **Hanya Owner** yang bisa mengubah persentase (tombol *Ubah pembagian*); yang diubah persentasenya, bukan nominalnya.
   Dividen yang negatif dibagi dengan cara yang sama (kerugian).
-- **Pengambilan dividen.** Tabel pemilik punya kolom **Ambil** (uang bagian dividen yang sudah diambil) dan **Dividen final** (= bagian dividen − diambil, yaitu
-  yang belum diambil). Hanya **Owner** yang bisa mengisinya (sama seperti persentase). Jumlah yang diambil disimpan per pemilik
+- **Pengambilan dividen.** Tabel pemilik punya kolom **Ambil** (uang bagian dividen yang sudah diambil) dan **Sisa dividen** (= bagian dividen − diambil, yaitu
+  yang belum diambil; dulu bernama “Dividen final”). Hanya **Owner** yang bisa mengisinya (sama seperti persentase). Jumlah yang diambil disimpan per pemilik
   (`fin_unit_owners.taken_amount`); mengubah persentase pemilik tidak menghapusnya, dan pemilik yang sudah mengambil uang tidak bisa dihapus.
   - **Sekolah Bola**: kolom Ambil diisi manual (0 sampai bagian dividen pemilik itu) dan ada kotak centang **Ambil semua** per pemilik serta di judul kolom.
   - **Liga**: hanya **semua atau tidak** — satu kotak centang “Sudah diambil” per pemilik, dan tanda “Sudah diambil” tampil di samping namanya.
+- **Tanda “Ringkasan Owner” per pemilik** (Liga dan Sekolah Bola, `fin_unit_owners.in_overview`, migrasi `0006`). Owner mencentang
+  *Tampilkan di Ringkasan Owner* per pemilik di dialog *Ubah pembagian* (juga saat unit dibuat). Hanya uang yang **sudah diambil** oleh pemilik
+  bertanda yang dijumlahkan di Ringkasan Owner; pemilik bertanda diberi label “Ringkasan Owner” di tabel Dividen dan ★ di Kelola Unit.
+  Pemilik lama tidak bertanda (default), jadi Ringkasan Owner bernilai 0 sampai Owner mencentangnya.
 - **Dividen Liga baru terbentuk saat event liga selesai.** Owner menekan *Tandai liga selesai* di halaman Dividen (`business_units.league_finished_on`).
   Sebelum itu angka dividen hanya perkiraan: tidak bisa diambil dan dihitung **0** di Ringkasan Owner. *Buka kembali* hanya bisa selama belum ada yang mengambil.
 - Pencatatan dividen lama berbasis nominal (`fin_dividends`) sudah tidak dipakai. Migrasi `0001` menyalinnya menjadi
@@ -57,9 +61,9 @@ bisa disimpan di jenis unit yang salah (ditolak di server, bukan hanya disembuny
 |---|---|
 | **Dividen Liga** | (uang modal + uang masuk registrasi + uang masuk match fee) − **RAB Actual** |
 | **Dividen Sekolah Bola** = **sisa saldo** | pemasukan − pengeluaran, **per bulan**; akumulasi = jumlah semua bulan |
-| **Dividen final unit** | dividen unit − yang sudah diambil pemilik. Unit Liga yang event-nya belum selesai = 0 |
-| **Akumulasi dividen Owner** | Σ dividen final unit Liga + Σ dividen final unit Sekolah Bola (yang belum diambil; yang sudah diambil tampil terpisah sebagai “Sudah diambil”) |
-| **Progres target** | akumulasi (dividen final) ÷ Rp 3.000.000.000 (akumulasi negatif dihitung 0%; bisa melebihi 100%) |
+| **Sisa dividen unit** | dividen unit − yang sudah diambil semua pemilik. Unit Liga yang event-nya belum selesai = 0. Hanya informasi di Ringkasan Owner |
+| **Akumulasi dividen Owner** | Σ yang sudah diambil pemilik bertanda “Ringkasan Owner” di unit Liga + Σ yang sama di unit Sekolah Bola |
+| **Progres target** | akumulasi ÷ Rp 3.000.000.000 (akumulasi negatif dihitung 0%; bisa melebihi 100%) |
 | **Akumulasi modal Owner** | Σ modal semua unit, Liga dan Sekolah Bola (tampil di Ringkasan Owner, dengan tabel modal per unit) |
 | **Akumulasi aset Owner** | Σ aset semua unit, Liga dan Sekolah Bola |
 | **Sisa saldo Laporan Keuangan** (Sekolah Bola) | saldo awal (modal) + total masuk − total keluar |

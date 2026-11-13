@@ -16,7 +16,7 @@ import {
   finUnitOwners,
 } from "@/lib/db/schema";
 import { schoolFigures, unitFigures, type PaymentKind, type UnitDataset } from "./calc";
-import { dividendFinal } from "./ownership";
+import { dividendFinal, overviewTaken } from "./ownership";
 import type { UnitType } from "./unit-types";
 
 /* Every list is for exactly one unit: pages never ask for "all units" rows. Only the owner dashboard
@@ -163,12 +163,16 @@ export async function getAllUnitFigures(units: readonly UnitRef[]) {
 
   const mine = <T extends { businessUnitId: string }>(rows: T[], unitId: string) => rows.filter((r) => r.businessUnitId === unitId);
 
-  /** `dividend` is what the formula gives; `payout` is what the Owner overview counts: the dividend minus what the owners already took. */
+  /**
+   * `dividend` is what the formula gives; `payout` splits it into what the owners took, the sisa dividen (not taken yet)
+   * and `overview`: what the owners flagged for the Owner overview took, the figure the Owner overview adds up.
+   */
   type Payout = ReturnType<typeof dividendFinal>;
   type Liga = { type: "liga"; figures: ReturnType<typeof unitFigures>; dividend: number; payout: Payout };
   type School = { type: "sekolah_bola"; figures: ReturnType<typeof schoolFigures>; dividend: number; payout: Payout };
   const out = new Map<string, Liga | School>();
   const takenOf = (unitId: string) => owners.filter((o) => o.businessUnitId === unitId).reduce((total, o) => total + o.takenAmount, 0);
+  const overviewOf = (unitId: string) => overviewTaken(owners.filter((o) => o.businessUnitId === unitId));
 
   for (const u of units) {
     if (u.type === "liga") {
@@ -183,7 +187,7 @@ export async function getAllUnitFigures(units: readonly UnitRef[]) {
         actualCosts: mine(actualCosts, u.id),
       });
       // a Liga has no dividend to share (or count) until its event is marked finished
-      out.set(u.id, { type: "liga", figures, dividend: figures.dividend.value, payout: dividendFinal(figures.dividend.value, takenOf(u.id), !!u.leagueFinishedOn) });
+      out.set(u.id, { type: "liga", figures, dividend: figures.dividend.value, payout: dividendFinal(figures.dividend.value, takenOf(u.id), !!u.leagueFinishedOn, overviewOf(u.id)) });
     } else {
       const figures = schoolFigures({
         students: mine(students, u.id).length,
@@ -192,7 +196,7 @@ export async function getAllUnitFigures(units: readonly UnitRef[]) {
         assets: mine(assets, u.id),
         capital: mine(capital, u.id),
       });
-      out.set(u.id, { type: "sekolah_bola", figures, dividend: figures.dividend, payout: dividendFinal(figures.dividend, takenOf(u.id)) });
+      out.set(u.id, { type: "sekolah_bola", figures, dividend: figures.dividend, payout: dividendFinal(figures.dividend, takenOf(u.id), true, overviewOf(u.id)) });
     }
   }
   return out;

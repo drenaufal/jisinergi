@@ -19,6 +19,7 @@ import { Kpi } from "@/components/finance/kpi";
 import { getI18n } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
 import { AddRecordButton, DeleteRecordButton, EditRecordButton, type FinanceRecord } from "../forms";
+import { StudentDetail } from "./student-detail";
 
 export const metadata: Metadata = { title: "Pemasukan" };
 export const dynamic = "force-dynamic";
@@ -126,7 +127,7 @@ export default async function IncomePage({
           { term: "Diskon", text: "Potongan yang diberikan. Hanya informasi, bukan bagian dari uang yang diterima." },
           { term: "Bukti", text: "Foto atau scan bukti pembayaran. Klik “Lihat bukti” untuk membukanya." },
         ]}
-        tip={canInput ? "Gunakan tombol “Bayar” di baris siswa untuk mencatat pembayarannya dengan cepat." : undefined}
+        tip={canInput ? "Klik nama anak untuk melihat detail dan riwayat pembayarannya. Tombol “Bayar” di baris siswa mencatat pembayaran dengan cepat." : "Klik nama anak untuk melihat detail dan riwayat pembayarannya."}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
@@ -191,10 +192,10 @@ export default async function IncomePage({
                   <THead>
                     <TR className="hover:bg-transparent">
                       <TH className="w-10">No</TH>
-                      <TH><ColumnHead label="Nama anak" hint="Nama panggilan" /></TH>
-                      <TH><ColumnHead label="Tanggal lahir" hint="Anak" /></TH>
+                      <TH><ColumnHead label="Nama anak" hint="Klik untuk detail" /></TH>
+                      <TH>Tanggal lahir</TH>
                       <TH><ColumnHead label="Bergabung" hint="Tanggal masuk" /></TH>
-                      <TH className="text-center"><ColumnHead label="No punggung" hint="Ukuran jersey" align="center" /></TH>
+                      <TH className="text-center">No punggung</TH>
                       <TH><ColumnHead label="Registrasi" hint="Uang · diskon" /></TH>
                       <TH><ColumnHead label={`Bulan ini`} hint={monthLabel(month)} /></TH>
                       <TH className="text-right"><ColumnHead label="Total dibayar" hint="Semua jenis" align="right" /></TH>
@@ -210,23 +211,43 @@ export default async function IncomePage({
                         <TR key={s.id}>
                           <TD className="tabular-nums text-ink-muted">{i + 1}</TD>
                           <TD>
-                            <span className="font-medium text-ink">{s.name}</span>
-                            {(s.nickname || s.nik) && (
-                              <span className="block text-[11px] text-ink-muted">
-                                {[s.nickname && `“${s.nickname}”`, s.nik].filter(Boolean).join(" · ")}
-                              </span>
-                            )}
-                            {s.parentPhone && <span className="block text-[11px] tabular-nums text-ink-muted">Telp. {s.parentPhone}</span>}
+                            <StudentDetail
+                              student={{
+                                id: s.id,
+                                name: s.name,
+                                nickname: s.nickname,
+                                nik: s.nik,
+                                birthDate: s.birthDate,
+                                birthPlace: s.birthPlace,
+                                parentPhone: s.parentPhone,
+                                joinedOn: s.joinedOn,
+                                jerseyNumber: s.jerseyNumber,
+                                jerseySize: s.jerseySize,
+                                sizeType: s.sizeType,
+                                note: s.note,
+                              }}
+                              record={studentRecord(s)}
+                              payments={mine.map((p) => ({
+                                id: p.id,
+                                kind: p.kind,
+                                kindLabel: PAYMENT_KIND_LABEL[p.kind],
+                                paidOn: p.paidOn,
+                                month: coveredMonth(p),
+                                amount: p.amount,
+                                discount: p.discount,
+                                proofUrl: p.proofUrl,
+                                note: p.note,
+                                record: paymentRecord(p),
+                              }))}
+                              ctx={formCtx}
+                              canInput={canInput}
+                              canDelete={canDelete}
+                              hasRegistration={!!reg}
+                            />
                           </TD>
-                          <TD className="whitespace-nowrap tabular-nums">
-                            {s.birthDate ? fmt.date(s.birthDate) : "—"}
-                            {s.birthPlace && <span className="block text-[11px] text-ink-muted">{s.birthPlace}</span>}
-                          </TD>
+                          <TD className="whitespace-nowrap tabular-nums">{s.birthDate ? fmt.date(s.birthDate) : "—"}</TD>
                           <TD className="whitespace-nowrap tabular-nums">{fmt.date(s.joinedOn)}</TD>
-                          <TD className="text-center tabular-nums">
-                            {s.jerseyNumber ?? "—"}
-                            {(s.jerseySize || s.sizeType) && <span className="block text-[11px] text-ink-muted">{[s.jerseySize, s.sizeType].filter(Boolean).join(" · ")}</span>}
-                          </TD>
+                          <TD className="text-center tabular-nums">{s.jerseyNumber ?? "—"}</TD>
                           <TD>
                             {reg ? (
                               <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">

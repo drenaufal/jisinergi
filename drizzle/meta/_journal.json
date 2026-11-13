@@ -43,6 +43,13 @@
       "when": 1794033533254,
       "tag": "0005_drop_asset_budget_item",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1794410109234,
+      "tag": "0006_owner_overview_flag",
+      "breakpoints": true
     }
   ]
 }

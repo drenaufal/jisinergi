@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Building2, FileCheck2, ScrollText, Target } from "lucide-react";
 import { LoginForm } from "./login-form";
-import { Logo } from "@/components/brand/logo";
+import { LogoLockup } from "@/components/brand/logo";
 import { BRAND } from "@/lib/brand";
 import { getCurrentUser } from "@/lib/auth/session";
 
@@ -24,7 +24,7 @@ export default async function LoginPage() {
   return (
     <main className="grid min-h-dvh bg-white lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
       {/* Statement panel */}
-      <section className="relative hidden flex-col justify-between overflow-hidden bg-black p-12 text-white lg:flex">
+      <section className="relative hidden flex-col justify-between gap-10 overflow-hidden bg-black p-12 text-white lg:flex">
         {/* Grid of thin white lines — the only decoration */}
         <div
           aria-hidden
@@ -36,7 +36,7 @@ export default async function LoginPage() {
           }}
         />
         <div className="relative">
-          <Logo invert />
+          <LogoLockup invert className="w-44" />
         </div>
 
         <div className="relative max-w-xl">
@@ -62,8 +62,8 @@ export default async function LoginPage() {
 
       {/* Form panel */}
       <section className="flex min-h-dvh flex-col px-6 py-8 sm:px-12 lg:min-h-0">
-        <div className="lg:hidden">
-          <Logo />
+        <div className="flex justify-center pt-4 lg:hidden">
+          <LogoLockup className="w-44" />
         </div>
         <div className="m-auto w-full max-w-[26rem] py-10">
           <React.Suspense>

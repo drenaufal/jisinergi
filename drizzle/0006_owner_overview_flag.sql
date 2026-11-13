@@ -1,0 +1,1 @@
+ALTER TABLE `fin_unit_owners` ADD `in_overview` boolean DEFAULT false NOT NULL;

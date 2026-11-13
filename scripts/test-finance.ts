@@ -39,7 +39,7 @@ import {
   type PaymentAmounts,
   type UnitDataset,
 } from "@/lib/finance/calc";
-import { BP_TOTAL, bpToField, dividendFinal, equalShares, maxTaken, ownerPayouts, ownersSchema, percentToBp, readOwnerRows, splitByShares } from "@/lib/finance/ownership";
+import { BP_TOTAL, bpToField, dividendFinal, equalShares, maxTaken, overviewTaken, ownerPayouts, ownersSchema, percentToBp, readOwnerRows, splitByShares } from "@/lib/finance/ownership";
 import { planRabActualImport } from "@/lib/finance/excel/rab-actual-plan";
 import { emptyParsed } from "@/lib/finance/excel/excel-types";
 import { DIVIDEND_TARGET } from "@/lib/finance/config";
@@ -354,14 +354,16 @@ ok(!ownersSchema(t).safeParse(rowsOf(["A", "60"], ["B", "30"])).success, "owners
 ok(!ownersSchema(t).safeParse(rowsOf(["A", "60"], ["a", "40"])).success, "owners form: two owners cannot share a name");
 ok(!ownersSchema(t).safeParse(rowsOf(["", "100"])).success && !ownersSchema(t).safeParse(rowsOf(["A", "0"], ["B", "100"])).success, "owners form: every owner needs a name and a share above 0");
 ok(!ownersSchema(t).safeParse([]).success, "owners form: at least one owner");
-eq(ownersSchema(t).parse(rowsOf(["A", "60", "Rp 15.000.000"], ["B", "40"])), [{ name: "A", shareBp: 6000, capital: 15000000 }, { name: "B", shareBp: 4000, capital: 0 }], "owners form: shares in basis points, modal read from “Rp 15.000.000”, blank modal = 0");
+eq(ownersSchema(t).parse(rowsOf(["A", "60", "Rp 15.000.000"], ["B", "40"])), [{ name: "A", shareBp: 6000, capital: 15000000, inOverview: false }, { name: "B", shareBp: 4000, capital: 0, inOverview: false }], "owners form: shares in basis points, modal read from “Rp 15.000.000”, blank modal = 0");
 const posted = new FormData();
-for (const [n, pc, cap] of [["A", "70", "100"], ["B", "30", ""]]) {
+for (const [n, pc, cap, flag] of [["A", "70", "100", "1"], ["B", "30", "", "0"]]) {
   posted.append("ownerName", n);
   posted.append("ownerPercent", pc);
   posted.append("ownerCapital", cap);
+  posted.append("ownerOverview", flag);
 }
-eq(readOwnerRows(posted), [{ name: "A", percent: "70", capital: "100" }, { name: "B", percent: "30", capital: "" }], "owners form: repeated fields are read back as rows");
+eq(readOwnerRows(posted), [{ name: "A", percent: "70", capital: "100", overview: true }, { name: "B", percent: "30", capital: "", overview: false }], "owners form: repeated fields are read back as rows");
+eq(ownersSchema(t).parse(readOwnerRows(posted)).map((o) => o.inOverview), [true, false], "owners form: the Ringkasan Owner flag is kept per owner");
 
 /* ── RAB: asset lines and locked lines ── */
 const budgetInput = { period: "monthly", category: "Biaya Peralatan", name: "Dispenser", quantity: "1", unitPrice: "1000000", note: "" };
@@ -481,14 +483,16 @@ const withOther = unitFigures({ ...ligaData, otherIncome: [{ amount: 61000 }, { 
 eq([withOther.otherIncome, withOther.income, withOther.dividend.value], [{ total: 261000, count: 2 }, liga.income, liga.dividend.value], "other income: counted on its own, not in the income of the formula nor the dividend");
 eq(unitFigures(ligaData).otherIncome, { total: 0, count: 0 }, "other income: none yet");
 
-/* ── Dividen: diambil dan dividen final ── */
+/* ── Dividen: diambil, sisa dividen, dan pemilik bertanda Ringkasan Owner ── */
 const takers = [{ shareBp: 6000, takenAmount: 0 }, { shareBp: 4000, takenAmount: 100 }];
-eq(ownerPayouts(1000, takers), [{ share: 600, taken: 0, final: 600 }, { share: 400, taken: 100, final: 300 }], "payout: share, taken and dividen final per owner");
+eq(ownerPayouts(1000, takers), [{ share: 600, taken: 0, final: 600 }, { share: 400, taken: 100, final: 300 }], "payout: share, taken and sisa dividen per owner");
 eq(ownerPayouts(-1000, takers).map((p) => p.share), [-600, -400], "payout: a loss is shared the same way");
 eq([maxTaken(600), maxTaken(-5), maxTaken(0)], [600, 0, 0], "payout: at most the share can be taken, nothing from a loss");
-eq(dividendFinal(1000, 100), { dividend: 1000, taken: 100, generated: true, final: 900 }, "dividen final: dividend − taken");
-eq(dividendFinal(1000, 0).final, 1000, "dividen final: nothing taken yet, the whole dividend counts");
-eq(dividendFinal(1000, 0, false).final, 0, "dividen final: a Liga whose event is not finished counts 0");
+eq(dividendFinal(1000, 100), { dividend: 1000, taken: 100, generated: true, final: 900, overview: 0 }, "sisa dividen: dividend − taken");
+eq(dividendFinal(1000, 0).final, 1000, "sisa dividen: nothing taken yet, the whole dividend is left");
+eq(dividendFinal(1000, 0, false).final, 0, "sisa dividen: a Liga whose event is not finished has none yet");
+eq(overviewTaken([{ takenAmount: 500, inOverview: true }, { takenAmount: 300, inOverview: false }, { takenAmount: 0, inOverview: true }]), 500, "Ringkasan Owner: only what flagged owners took is counted");
+eq(dividendFinal(1000, 800, true, 500).overview, 500, "Ringkasan Owner: the unit payout carries the flagged owners' total");
 
 /* ── Upload RAB Actual: what loading a workbook into a unit would do ── */
 {

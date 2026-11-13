@@ -1,35 +1,45 @@
 import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
+import { LOCKUP, MARK, WORDMARK } from "./logo-paths";
 
-/** Square monogram. */
+type Shape = { readonly w: number; readonly h: number; readonly d: string };
+
+/** One traced shape drawn in `currentColor`, so it follows the text colour (black on white, white on black). */
+function Shape({ shape, className, title }: { shape: Shape; className?: string; title?: string }) {
+  return (
+    <svg
+      viewBox={`0 0 ${shape.w} ${shape.h}`}
+      role={title ? "img" : undefined}
+      aria-hidden={title ? undefined : true}
+      aria-label={title}
+      className={cn("block shrink-0", className)}
+      fill="currentColor"
+    >
+      <path fillRule="evenodd" d={shape.d} />
+    </svg>
+  );
+}
+
+/** The emblem alone (ball + rising chart). Height drives the size; width follows the artwork. */
 export function LogoMark({ className, invert }: { className?: string; invert?: boolean }) {
+  return <Shape shape={MARK} className={cn("h-9 w-auto", invert ? "text-white" : "text-black", className)} />;
+}
+
+/** Emblem + wordmark side by side, for bars and headers. `invert` is for black backgrounds; `compact` drops the wordmark. */
+export function Logo({ className, invert, compact }: { className?: string; invert?: boolean; compact?: boolean }) {
   return (
     <span
-      aria-hidden
-      className={cn(
-        "grid size-9 shrink-0 place-items-center text-[17px] font-black leading-none",
-        invert ? "bg-white text-black" : "bg-black text-white",
-        className,
-      )}
+      role="img"
+      aria-label={BRAND.name}
+      className={cn("inline-flex items-center gap-3", invert ? "text-white" : "text-black", className)}
     >
-      F
+      <Shape shape={MARK} className="h-9 w-auto" />
+      {!compact && <Shape shape={WORDMARK} className="h-[15px] w-auto" />}
     </span>
   );
 }
 
-/** Monogram + two-line wordmark. `invert` is for black backgrounds. */
-export function Logo({ className, invert, compact }: { className?: string; invert?: boolean; compact?: boolean }) {
-  return (
-    <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <LogoMark invert={invert} />
-      {!compact && (
-        <span className="leading-none">
-          <span className={cn("block text-[15px] font-extrabold tracking-[0.2em]", invert ? "text-white" : "text-ink")}>{BRAND.wordmark.top}</span>
-          <span className={cn("mt-1 block text-[9px] font-semibold tracking-[0.42em]", invert ? "text-white/70" : "text-ink-muted")}>
-            {BRAND.wordmark.bottom}
-          </span>
-        </span>
-      )}
-    </span>
-  );
+/** The full stacked artwork (emblem over wordmark), for large surfaces such as the sign-in page. Width drives the size. */
+export function LogoLockup({ className, invert }: { className?: string; invert?: boolean }) {
+  return <Shape shape={LOCKUP} title={BRAND.name} className={cn("h-auto w-56", invert ? "text-white" : "text-black", className)} />;
 }
