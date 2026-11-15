@@ -123,7 +123,7 @@ export default async function IncomePage({
         terms={[
           { term: "Registrasi", text: "Uang pendaftaran, dibayar sekali per siswa, dengan diskon jika ada. Sudah termasuk iuran bulan saat registrasi dibayar." },
           { term: "Iuran bulanan", text: "Satu pembayaran untuk setiap bulan; kolom “Bulan ini” menunjukkan siapa yang belum membayar." },
-          { term: "Sisa saldo", text: "Pemasukan bulan ini dikurangi pengeluaran bulan ini (dividen per bulan). Uang jersey tidak dicatat sebagai pemasukan." },
+          { term: "Sisa saldo", text: "Pemasukan bulan ini dikurangi pengeluaran bulan ini. Dividen = uang modal + semua pemasukan − semua pengeluaran (menu Dividen). Uang jersey tidak dicatat sebagai pemasukan." },
           { term: "Diskon", text: "Potongan yang diberikan. Hanya informasi, bukan bagian dari uang yang diterima." },
           { term: "Bukti", text: "Foto atau scan bukti pembayaran. Klik “Lihat bukti” untuk membukanya." },
         ]}
@@ -136,7 +136,7 @@ export default async function IncomePage({
         <Kpi label="Registrasi" value={fmt.rupiahCompact(income.registration)} full={fmt.rupiah(income.registration)} icon={<Wallet className="size-4" />} block="white" hint={`${fmt.number(new Set(payments.filter((p) => p.kind === "registration").map((p) => p.studentId)).size)} siswa`} />
         <Kpi label="Iuran bulanan" value={fmt.rupiahCompact(income.monthly)} full={fmt.rupiah(income.monthly)} icon={<CalendarCheck className="size-4" />} block="white" hint={`${fmt.number(paidThisMonth)}/${fmt.number(students.length)} siswa bayar ${monthLabel(month)}`} />
         <Kpi label="Diskon diberikan" value={fmt.rupiahCompact(income.discounts)} full={fmt.rupiah(income.discounts)} icon={<Percent className="size-4" />} block="yellow" hint="Registrasi + bulanan" />
-        <Kpi label="Sisa saldo" value={fmt.rupiahCompact(balanceNow)} full={fmt.rupiah(balanceNow)} icon={<Scale className="size-4" />} block="night" hint={`Dividen ${monthLabel(month)} · akumulasi ${fmt.rupiahCompact(balanceAll)}`} />
+        <Kpi label="Sisa saldo" value={fmt.rupiahCompact(balanceNow)} full={fmt.rupiah(balanceNow)} icon={<Scale className="size-4" />} block="night" hint={`Bulan ${monthLabel(month)} · akumulasi ${fmt.rupiahCompact(balanceAll)}`} />
       </div>
 
       {months.length > 0 && (

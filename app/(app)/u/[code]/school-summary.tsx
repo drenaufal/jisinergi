@@ -59,7 +59,7 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
           <Kpi label="Pengeluaran" value={fmt.rupiahCompact(f.expense)} full={fmt.rupiah(f.expense)} icon={<ArrowUpFromLine className="size-4" />} block="blue" hint={`${fmt.number(expenses.length)} catatan pengeluaran`} />
         </Link>
         <Link href={link("dividen")} className="block transition-transform hover:-translate-y-0.5">
-          <Kpi label="Sisa saldo" value={fmt.rupiahCompact(f.dividend)} full={fmt.rupiah(f.dividend)} icon={<Scale className="size-4" />} block="night" hint="Pemasukan − pengeluaran, semua bulan" />
+          <Kpi label="Sisa saldo" value={fmt.rupiahCompact(f.net)} full={fmt.rupiah(f.net)} icon={<Scale className="size-4" />} block="night" hint={`Pemasukan − pengeluaran · dividen ${fmt.rupiahCompact(f.dividend)}`} />
         </Link>
         <Link href={link("pemasukan")} className="block transition-transform hover:-translate-y-0.5">
           <Kpi label="Siswa terdaftar" value={fmt.number(students.length)} icon={<Users className="size-4" />} block="white" hint="Klik untuk melihat daftar siswa" />
@@ -83,15 +83,16 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
 
       <Formula
         className="mt-4"
-        title="Perhitungan sisa saldo — Sekolah Bola"
-        formula="Sisa saldo per bulan = Pemasukan − Pengeluaran"
+        title="Perhitungan dividen — Sekolah Bola"
+        formula="Dividen = (Uang modal + Pemasukan) − Pengeluaran"
         lines={[
-          { label: "Total pemasukan", value: fmt.rupiah(f.income.total), href: link("pemasukan"), hint: "Registrasi + iuran bulanan" },
+          { label: "Uang modal", value: fmt.rupiah(f.capital.total), href: link("modal") },
+          { op: "+", label: "Total pemasukan", value: fmt.rupiah(f.income.total), href: link("pemasukan"), hint: "Registrasi + iuran bulanan" },
           { op: "−", label: "Total pengeluaran", value: fmt.rupiah(f.expense), href: link("pengeluaran") },
         ]}
-        resultLabel="Sisa saldo (akumulasi)"
+        resultLabel="Dividen (rumus)"
         result={fmt.rupiah(f.dividend)}
-        note="Tabel di bawah memecah angka ini per bulan. Hasil akumulasi ikut dijumlahkan ke dividen Owner dan dibagi ke para pemilik di menu Dividen."
+        note="Tabel di bawah memecah pemasukan − pengeluaran per bulan (sisa saldo). Dividen ini dibagi ke para pemilik di menu Dividen."
       />
 
       {f.months.length > 0 && (
@@ -107,7 +108,7 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
                   { label: "Pemasukan", style: "solid" },
                   { label: "Pengeluaran", style: "hatch" },
                 ]}
-                summary={`Pemasukan dan pengeluaran per bulan, sisa saldo ${fmt.rupiah(f.dividend)}`}
+                summary={`Pemasukan dan pengeluaran per bulan, sisa saldo ${fmt.rupiah(f.net)}`}
               />
             </CardContent>
           </Card>
@@ -163,7 +164,7 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
                   <td className="px-3 py-3 text-xs font-semibold uppercase tracking-wider">Total</td>
                   <td className="px-3 py-3 text-right">{fmt.rupiah(f.income.total)}</td>
                   <td className="px-3 py-3 text-right">{fmt.rupiah(f.expense)}</td>
-                  <td className="px-3 py-3 text-right">{fmt.rupiah(f.dividend)}</td>
+                  <td className="px-3 py-3 text-right">{fmt.rupiah(f.net)}</td>
                 </tr>
               </tfoot>
             </Table>

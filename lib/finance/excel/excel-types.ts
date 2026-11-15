@@ -21,8 +21,11 @@ export type ParsedLine = {
 /** A cost line that is not in the RAB (an "extra" line of RAB Actual). */
 export type ParsedExtra = { period: Period; category: string; name: string };
 
-/** Money really spent in program week `week` on a RAB line (`line`: index into lines) or an extra line (`extra`). */
-export type ParsedCost = { target: { line: number } | { extra: number }; week: number; amount: number; image: string | null; note: string | null };
+/**
+ * Money really spent in program week `week` on a RAB line (`line`: index into lines) or an extra line (`extra`).
+ * `spentOn`, when the file states the real date (the RAB Actual template), wins over the week.
+ */
+export type ParsedCost = { target: { line: number } | { extra: number }; week: number; spentOn?: string; amount: number; image: string | null; note: string | null };
 
 export type ParsedRegistration = {
   ageGroup: string;

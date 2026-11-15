@@ -79,6 +79,7 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
   const shownAssetUnits = pool.filter((u) => assetOf(u.id).count > 0 || selected);
   const schoolIncome = sum(shownSchool, (x) => x.f.income.total);
   const schoolExpense = sum(shownSchool, (x) => x.f.expense);
+  const schoolCapital = sum(shownSchool, (x) => x.f.capital.total);
   // formula dividend → minus what was taken → dividend final, for the units in view
   const ligaOpen = shownLiga.filter((x) => !x.payout.generated);
   const ligaPaid = {
@@ -194,12 +195,12 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
               intro="Bagian atas menjumlahkan dividen yang sudah diambil pemilik bertanda “Ringkasan Owner” dari semua unit, lalu membandingkannya dengan target. Di bawahnya, dividen Liga dan dividen Sekolah Bola dijelaskan sendiri-sendiri karena rumusnya berbeda, disusul akumulasi modal dan aset. Filter unit hanya mempengaruhi tabel per unit, bukan angka target maupun total modal dan aset."
               terms={[
                 { term: "Dividen Liga", text: "(Uang modal + uang masuk registrasi + uang masuk match fee) − RAB Actual, dihitung per unit Liga." },
-                { term: "Dividen Sekolah Bola", text: "Pemasukan − pengeluaran, dihitung per bulan lalu dijumlahkan, per unit Sekolah Bola." },
+                { term: "Dividen Sekolah Bola", text: "(Uang modal + pemasukan) − pengeluaran, dihitung per unit Sekolah Bola." },
                 { term: "Pemilik bertanda", text: "Pemilik yang dicentang “Tampilkan di Ringkasan Owner” di menu Dividen unit → Ubah pembagian. Hanya dividen yang diambil pemilik inilah yang dijumlahkan ke akumulasi." },
                 { term: "Sisa dividen", text: "Dividen unit dikurangi yang sudah diambil semua pemilik (diisi di menu Dividen unit). Hanya informasi, tidak dihitung ke target." },
                 { term: "Dividen Liga baru dihitung setelah event selesai", text: "Dividen sebuah unit Liga baru terbentuk, bisa diambil, dan ikut dihitung di sini setelah Owner menandai event liga-nya selesai." },
                 { term: "Akumulasi", text: "Dividen Liga ditambah dividen Sekolah Bola yang sudah diambil pemilik bertanda, dari semua unit." },
-                { term: "Total modal", text: "Uang yang disetor pemilik ke semua unit, Liga dan Sekolah Bola, dari menu Modal masing-masing unit. Tidak ikut mengubah dividen Sekolah Bola." },
+                { term: "Total modal", text: "Uang yang disetor pemilik ke semua unit, Liga dan Sekolah Bola, dari menu Modal masing-masing unit. Modal ikut dihitung dalam dividen Liga maupun Sekolah Bola." },
                 { term: "Total aset", text: "Nilai seluruh aset dari semua unit, Liga dan Sekolah Bola. Aset berasal dari menu Aset, baris RAB bertanda Aset, dan pengeluaran Sekolah Bola bertanda Aset." },
               ]}
             />
@@ -297,16 +298,17 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                     <div className="space-y-4">
                       <Formula
                         title={selected ? `Perhitungan — ${selected.name}` : "Perhitungan — semua unit Sekolah Bola"}
-                        formula="Dividen per bulan = Pemasukan − Pengeluaran"
+                        formula="Dividen = (Uang modal + Pemasukan) − Pengeluaran"
                         lines={[
-                          { label: "Total pemasukan", value: fmt.rupiah(schoolIncome), hint: "Registrasi + iuran bulanan" },
+                          { label: "Uang modal", value: fmt.rupiah(schoolCapital) },
+                          { op: "+", label: "Total pemasukan", value: fmt.rupiah(schoolIncome), hint: "Registrasi + iuran bulanan" },
                           { op: "−", label: "Total pengeluaran", value: fmt.rupiah(schoolExpense) },
                         ]}
                         resultLabel="Dividen Sekolah Bola (rumus)"
-                        result={fmt.rupiah(schoolIncome - schoolExpense)}
+                        result={fmt.rupiah(schoolCapital + schoolIncome - schoolExpense)}
                         note={
                           <dl className="space-y-1">
-                            <div className="flex justify-between gap-3"><dt>Sisa saldo (dividen)</dt><dd className="tabular-nums text-ink">{fmt.rupiah(schoolPaid.generated)}</dd></div>
+                            <div className="flex justify-between gap-3"><dt>Dividen</dt><dd className="tabular-nums text-ink">{fmt.rupiah(schoolPaid.generated)}</dd></div>
                             <div className="flex justify-between gap-3"><dt>− Sudah diambil pemilik</dt><dd className="tabular-nums text-ink">{fmt.rupiah(schoolPaid.taken)}</dd></div>
                             <div className="flex justify-between gap-3 border-t border-line pt-1 text-ink"><dt>= Sisa dividen</dt><dd className="tabular-nums">{fmt.rupiah(schoolPaid.final)}</dd></div>
                             <div className="flex justify-between gap-3 border-t border-line pt-1 font-semibold text-ink"><dt>Diambil pemilik bertanda (dihitung ke target)</dt><dd className="tabular-nums">{fmt.rupiah(schoolPaid.overview)}</dd></div>

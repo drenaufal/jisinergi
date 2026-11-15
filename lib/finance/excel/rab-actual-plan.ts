@@ -6,7 +6,7 @@
  * missing ones are created. Costs are dated on the first day of their program week. A cost that the unit already has
  * (same line, date and amount) is skipped, so loading the same file twice does not double the spending.
  */
-import { weekStartDate } from "../calc";
+import { weekNumber, weekStartDate } from "../calc";
 import { norm, tidy, type ParsedUnit, type Period } from "./excel-types";
 
 export type ExistingLine = { id: string; period: Period; category: string; categoryOrder: number; name: string; itemOrder: number; isAsset: boolean };
@@ -52,10 +52,10 @@ export function planRabActualImport(input: { parsed: ParsedUnit; startsOn: strin
   const knownByName = new Map<string, ExistingLine>();
   for (const l of input.existingBudget) if (!knownByName.has(nameKey(l.category, l.name))) knownByName.set(nameKey(l.category, l.name), l);
 
-  const orderOf = new Map<string, { categoryOrder: number; items: number }>(); // `${period}|${norm(category)}`
+  const orderOf = new Map<string, { categoryOrder: number; items: number; label: string }>(); // `${period}|${norm(category)}`
   for (const l of input.existingBudget) {
     const key = `${l.period}|${norm(l.category)}`;
-    const cur = orderOf.get(key) ?? { categoryOrder: l.categoryOrder, items: 0 };
+    const cur = orderOf.get(key) ?? { categoryOrder: l.categoryOrder, items: 0, label: l.category };
     cur.items = Math.max(cur.items, l.itemOrder);
     orderOf.set(key, cur);
   }
@@ -73,11 +73,12 @@ export function planRabActualImport(input: { parsed: ParsedUnit; startsOn: strin
     if (again) return void lineTarget.push(again);
     const catKey = `${l.period}|${norm(l.category)}`;
     let cat = orderOf.get(catKey);
-    if (!cat) orderOf.set(catKey, (cat = { categoryOrder: ++lastCategory[l.period], items: 0 }));
+    if (!cat) orderOf.set(catKey, (cat = { categoryOrder: ++lastCategory[l.period], items: 0, label: tidy(l.category) }));
     const planned: PlannedLine = {
       id: crypto.randomUUID(),
       period: l.period,
-      category: tidy(l.category),
+      // a category the unit already has keeps its spelling, so the line joins that group
+      category: cat.label,
       categoryOrder: cat.categoryOrder,
       name: tidy(l.name),
       itemOrder: ++cat.items,
@@ -127,8 +128,9 @@ export function planRabActualImport(input: { parsed: ParsedUnit; startsOn: strin
     const budgetItemId = t && "id" in t ? t.id : t && "budgetItemId" in t ? t.budgetItemId : null;
     const actualItemId = t && "actualItemId" in t ? t.actualItemId : null;
     if (!t || (!budgetItemId && !actualItemId)) continue;
-    const spentOn = weekStartDate(startsOn, c.week);
-    const planned: PlannedCost = { budgetItemId, actualItemId, week: c.week, spentOn, amount: c.amount, note: c.note, isAsset: "isAsset" in t ? t.isAsset : false, lineName: t.name };
+    const spentOn = c.spentOn ?? weekStartDate(startsOn, c.week);
+    const week = c.spentOn ? weekNumber(startsOn, c.spentOn) : c.week;
+    const planned: PlannedCost = { budgetItemId, actualItemId, week, spentOn, amount: c.amount, note: c.note, isAsset: "isAsset" in t ? t.isAsset : false, lineName: t.name };
     const left = have.get(costKey(planned)) ?? 0;
     if (left > 0) {
       have.set(costKey(planned), left - 1);

@@ -35,7 +35,7 @@ export const UNIT_MENUS: Record<UnitType, readonly UnitMenu[]> = {
     { slug: "laporan-keuangan", label: "Laporan Keuangan", hint: "Uang masuk dan keluar, saldo awal sampai sisa saldo" },
     { slug: "aset", label: "Aset", hint: "Peralatan dan sarana yang dimiliki" },
     { slug: "modal", label: "Modal", hint: "Uang yang disetor pemilik" },
-    { slug: "dividen", label: "Dividen", hint: "Sisa saldo dan pembagian per pemilik (%)" },
+    { slug: "dividen", label: "Dividen", hint: "Rumus dividen dan pembagian per pemilik (%)" },
   ],
 };
 

@@ -24,11 +24,11 @@ async function loadUnit(t: TFunction, unitId: string): Promise<UnitRow> {
   return unit;
 }
 
-/** The unit's dividend by its formula (Liga: with the RAB Actual; Sekolah Bola: income − expense). */
+/** The unit's dividend by its formula (Liga: with the RAB Actual; Sekolah Bola: (modal + income) − expense). */
 export async function unitDividendValue(unit: Pick<UnitRow, "id" | "type" | "programWeeks">) {
   if (unit.type === "liga") return unitFigures(await ligaDataset(unit.id, unit.programWeeks)).dividend.value;
   const school = await schoolDataset(unit.id);
-  return schoolFigures({ students: school.students.length, payments: school.payments, expenses: school.expenses }).dividend;
+  return schoolFigures({ students: school.students.length, payments: school.payments, expenses: school.expenses, capital: school.capital }).dividend;
 }
 
 /** Owner only: marks the league event as finished (the Liga dividend now exists) or opens it again. */

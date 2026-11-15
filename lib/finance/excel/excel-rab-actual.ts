@@ -159,6 +159,6 @@ export function parseRabActual(wb: Workbook): ParsedUnit {
   check("Actual mingguan 10 minggu (AA48)", stated.weeklyActual, costOfPeriod("weekly"));
   check("Actual bulanan (AA95)", stated.monthlyActual, costOfPeriod("monthly"));
   const opex = r.num(COL.actualTotal, 97);
-  check("Total estimasi OPEX actual (AA97)", opex, costOfPeriod("weekly") + costOfPeriod("monthly"));
+  check("Total actual (AA97)", opex, costOfPeriod("weekly") + costOfPeriod("monthly"));
   return out;
 }

@@ -103,7 +103,7 @@ export type BudgetTotals = {
   weeklyProgram: number;
   /** Monthly (one-off) costs, counted once. */
   monthly: number;
-  /** Estimasi OPEX = weeklyProgram + monthly. */
+  /** Total RAB Budget = weeklyProgram + monthly. */
   total: number;
 };
 
@@ -271,7 +271,7 @@ export function incomeByKind(payments: readonly PaymentAmounts[]) {
 export type MonthRow = { month: string; income: number; expense: number; dividend: number };
 
 /**
- * Dividen (Sekolah Bola) per bulan = Pemasukan − Pengeluaran. Cash basis: a payment counts in the month
+ * Sisa saldo (Sekolah Bola) per bulan = Pemasukan − Pengeluaran. Cash basis: a payment counts in the month
  * it was received, an expense in the month it was spent. Months with neither are not listed.
  */
 export function schoolMonthly(payments: readonly PaymentAmounts[], expenses: readonly ExpenseAmounts[]): MonthRow[] {
@@ -292,7 +292,9 @@ export type SchoolFigures = {
   students: number;
   income: ReturnType<typeof incomeByKind>;
   expense: number;
-  /** Sisa saldo = Pemasukan − Pengeluaran over every month so far. It is also the school's dividend. */
+  /** Sisa saldo operasional = Pemasukan − Pengeluaran over every month so far (without the modal). */
+  net: number;
+  /** Dividen (Sekolah Bola) = (Uang modal + Pemasukan) − Pengeluaran. */
   dividend: number;
   months: MonthRow[];
   /** Everything the school owns: assets bought directly or through an asset expense. */
@@ -306,20 +308,23 @@ export function schoolFigures(input: {
   payments: readonly PaymentAmounts[];
   expenses: readonly ExpenseAmounts[];
   assets?: readonly { amount: number }[];
-  capital?: readonly { amount: number; status: "outstanding" | "returned" }[];
+  /** The unit's modal: it is part of the dividend, so every caller must pass it. */
+  capital: readonly { amount: number; status: "outstanding" | "returned" }[];
 }): SchoolFigures {
   const income = incomeByKind(input.payments);
   const expense = sum(input.expenses, (e) => e.amount);
   const assets = input.assets ?? [];
-  const capital = input.capital ?? [];
+  const capital = input.capital;
+  const modal = capitalSummary(capital);
   return {
     students: input.students,
     income,
     expense,
-    dividend: income.total - expense,
+    net: income.total - expense,
+    dividend: modal.total + income.total - expense,
     months: schoolMonthly(input.payments, input.expenses),
     assets: { total: sum(assets, (a) => a.amount), count: assets.length },
-    capital: { ...capitalSummary(capital), count: capital.length },
+    capital: { ...modal, count: capital.length },
   };
 }
 
@@ -346,7 +351,7 @@ export type LedgerRow = {
 /**
  * The financial report as the "LAPORAN KEUANGAN" sheet lays it out: one list of everything that came in
  * and went out, oldest first (rows of one day keep the order they were entered in), with the totals above it.
- * Sisa saldo here = saldo awal + total masuk − total keluar, so unlike the dividend it starts from the opening balance.
+ * Sisa saldo here = saldo awal + total masuk − total keluar. With saldo awal = the modal it equals the school's dividend.
  */
 export function financialReport(input: {
   openingBalance: number;
@@ -494,7 +499,7 @@ export type ActualGrid = {
   /** Weekly costs and monthly (one-off) costs are separate parts, each with its own categories and totals. */
   weekly: ActualSection;
   monthly: ActualSection;
-  /** Both parts together ("Total estimasi OPEX"). */
+  /** Both parts together ("Total RAB Budget"). */
   totals: ActualTotals;
 };
 

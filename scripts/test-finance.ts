@@ -42,6 +42,9 @@ import {
 import { BP_TOTAL, bpToField, dividendFinal, equalShares, maxTaken, overviewTaken, ownerPayouts, ownersSchema, percentToBp, readOwnerRows, splitByShares } from "@/lib/finance/ownership";
 import { planRabActualImport } from "@/lib/finance/excel/rab-actual-plan";
 import { emptyParsed } from "@/lib/finance/excel/excel-types";
+import { actualTemplate, budgetTemplate, dateOf, parseActualTemplate, parseBudgetTemplate, resolveActualRows } from "@/lib/finance/excel/rab-templates";
+import { buildWorkbook, type CellInput } from "@/lib/finance/excel/xlsx-writer";
+import { readWorkbookBuffer } from "@/lib/finance/excel/xlsx-reader";
 import { DIVIDEND_TARGET } from "@/lib/finance/config";
 import { currentMonth } from "@/lib/finance/period";
 import { UNIT_KINDS } from "@/lib/finance/unit-types";
@@ -202,13 +205,14 @@ eq(schoolMonthly(payments, expenses), [
   { month: "2026-09", income: 650000, expense: 600000, dividend: 50000 },
   { month: "2026-10", income: 200000, expense: 600000, dividend: -400000 },
 ], "SISA SALDO SEKOLAH BOLA per bulan = pemasukan − pengeluaran (a month that spends more than it earns is negative)");
-const school = schoolFigures({ students: 2, payments, expenses });
-eq([school.income.total, school.expense, school.dividend], [1250000, 1900000, -650000], "SEKOLAH BOLA: accumulated sisa saldo = Σ monthly = total pemasukan − total pengeluaran");
+const school = schoolFigures({ students: 2, payments, expenses, capital: [] });
+eq([school.income.total, school.expense, school.net, school.dividend], [1250000, 1900000, -650000, -650000], "SEKOLAH BOLA: sisa saldo = Σ monthly = total pemasukan − total pengeluaran; without modal the dividend is the same");
 const schoolFull = schoolFigures({ students: 2, payments, expenses, assets: [{ amount: 750000 }, { amount: 120000 }], capital: [{ amount: 15000000, status: "outstanding" }, { amount: 10000000, status: "returned" }] });
 eq([schoolFull.assets, schoolFull.capital.total, schoolFull.capital.outstanding, schoolFull.capital.count], [{ total: 870000, count: 2 }, 25000000, 15000000, 2], "SEKOLAH BOLA: assets and modal add up");
-eq(schoolFull.dividend, school.dividend, "SEKOLAH BOLA: the sisa saldo ignores modal and assets");
-eq(sum(school.months, (m) => m.dividend), school.dividend, "the months add up to the accumulated dividend");
-eq(schoolFigures({ students: 0, payments: [], expenses: [] }).months, [], "an empty school has no months");
+eq(schoolFull.net, school.net, "SEKOLAH BOLA: the sisa saldo ignores modal and assets");
+eq(schoolFull.dividend, 25000000 + 1250000 - 1900000, "DIVIDEN SEKOLAH BOLA = (uang modal + pemasukan) − pengeluaran (all modal, returned or not, like Liga)");
+eq(sum(school.months, (m) => m.dividend), school.net, "the months add up to the sisa saldo");
+eq(schoolFigures({ students: 0, payments: [], expenses: [], capital: [] }).months, [], "an empty school has no months");
 
 /* ── Laporan keuangan: the "LAPORAN KEUANGAN" sheet ── */
 const stamped = (ms: number) => new Date(Date.UTC(2026, 10, 3, 0, 0, 0, ms));
@@ -530,6 +534,55 @@ eq(dividendFinal(1000, 800, true, 500).overview, 500, "Ringkasan Owner: the unit
   eq(again.costs.map((c) => c.budgetItemId ?? c.actualItemId), ["line-sewa", "line-dispenser"], "upload: the rest still lands on the existing lines");
   const inRab = planRabActualImport({ parsed, startsOn: "2026-10-05", existingBudget: [...existingBudget, { id: "line-ht", period: "weekly", category: "Sewa", categoryOrder: 3, name: "Sewa HT", itemOrder: 5, isAsset: false }], existingExtras: [], existingCosts: [] });
   eq([inRab.newExtras.length, inRab.costs[3].budgetItemId], [0, "line-ht"], "upload: an extra line whose name is already in the RAB is booked on the RAB line");
+}
+
+/* ── Excel templates: RAB Budget and RAB Actual (build → fill → read back → plan) ── */
+{
+  const head = (cells: string[]) => cells.map((value) => ({ value, style: "header" as const }));
+  const book = (name: string, header: string[], rows: CellInput[][]) => readWorkbookBuffer(buildWorkbook([{ name, columns: [], rows: [["judul"], [], [], head(header), ...rows] }]));
+
+  // the empty templates read back as templates with no rows
+  const emptyBudget = parseBudgetTemplate(readWorkbookBuffer(budgetTemplate({ name: "Liga Uji", programWeeks: 10 })));
+  eq([emptyBudget?.rows, emptyBudget?.problems], [0, []], "template: the downloaded RAB Budget template reads back (empty, Total formulas ignored)");
+  const actualBook = readWorkbookBuffer(actualTemplate({ name: "Liga Uji" }, [{ period: "weekly", category: "Lapangan", name: "Sewa lapangan", budget: 3000000, isAsset: false, inRab: true }]));
+  eq([parseActualTemplate(actualBook)?.count, actualBook.sheets.map((s) => s.name)], [0, ["RAB Actual", "Daftar RAB", "Petunjuk"]], "template: the RAB Actual template has its sheets and reads back empty");
+  eq(parseActualTemplate(readWorkbookBuffer(budgetTemplate({ name: "x", programWeeks: 1 }))), null, "template: a RAB Budget file is not taken for a RAB Actual file");
+
+  const budget = parseBudgetTemplate(
+    book("RAB Budget", ["Jenis Biaya", "Kategori", "Nama Biaya", "Jumlah Satuan", "Harga Satuan (Rp)", "Total (Rp)", "Aset (Ya/Tidak)", "Catatan"], [
+      ["Mingguan", "Lapangan", "Sewa lapangan", 2, 1500000, { formula: "D5*E5" }, "Tidak", "2 lapangan"],
+      ["bulanan", " Peralatan ", "Sound  sistem", null, "Rp 7.500.000", null, "ya", null],
+      [null, null, null, null, null, { formula: "D7*E7" }, null, null],
+      ["Harian", "Lapangan", "", 1.5, "abc", null, "mungkin", null],
+      ["Mingguan", "lapangan", "Sewa Lapangan", 1, 1, null, null, null],
+    ]),
+  )!;
+  eq(budget.parsed.lines.map((l) => [l.period, l.category, l.name, l.quantity, l.unitPrice, l.isAsset, l.note]), [
+    ["weekly", "Lapangan", "Sewa lapangan", 2, 1500000, false, "2 lapangan"],
+    ["monthly", "Peralatan", "Sound sistem", 1, 7500000, true, null],
+  ], "template RAB Budget: rows read (empty Jumlah = 1, “Rp 7.500.000” = 7500000, Ya = Aset, spaces tidied, formula-only rows skipped)");
+  eq(budget.problems.length, 2, "template RAB Budget: a bad row and a duplicate name are both reported");
+  eq([budget.problems[0].startsWith("Baris 8:"), budget.problems[1].includes("sama dengan baris 5")], [true, true], "template RAB Budget: problems name the Excel row");
+  const budgetPlan = planRabActualImport({ parsed: budget.parsed, startsOn: "2000-01-03", existingBudget: [{ id: "l1", period: "weekly", category: "LAPANGAN", categoryOrder: 1, name: "Sewa lapangan", itemOrder: 1, isAsset: false }], existingExtras: [], existingCosts: [] });
+  eq([budgetPlan.newLines.map((l) => l.name), budgetPlan.summary.lines.existing], [["Sound sistem"], 1], "template RAB Budget: a line the unit already has is skipped (immutable), the rest is created");
+
+  eq([dateOf(46329), dateOf("2026-11-03"), dateOf("03/11/2026"), dateOf("3 Nov 2026"), dateOf("31/02/2026"), dateOf(null)], ["2026-11-03", "2026-11-03", "2026-11-03", "2026-11-03", "bad", null], "template: dates from Excel day numbers and Indonesian text");
+
+  const actual = parseActualTemplate(
+    book("RAB Actual", ["Tanggal", "Jenis Biaya", "Kategori", "Keterangan Biaya", "Nominal (Rp)", "Catatan"], [
+      [46329, null, null, "sewa lapangan", 3000000, "minggu 1"],
+      ["2026-11-10", "Mingguan", "Lapangan", "Sewa lapangan", "3.000.000", null],
+      ["2026-11-05", "Bulanan", "Konsumsi", "Air mineral", 250000, null],
+      ["2026-11-05", null, null, "Tidak dikenal", 1000, null],
+      ["kemarin", null, null, "Sewa lapangan", 0, null],
+    ]),
+  )!;
+  eq([actual.count, actual.rows.length, actual.problems.length], [5, 4, 1], "template RAB Actual: a row with a bad date and a 0 amount is reported");
+  const resolved = resolveActualRows(actual.rows, [{ period: "weekly", category: "Lapangan", name: "Sewa lapangan" }], []);
+  eq([resolved.parsed.extras.length, resolved.parsed.costs.length, resolved.problems.length, resolved.outside], [2, 3, 1, ["Air mineral (Konsumsi)"]], "template RAB Actual: empty Kategori/Jenis come from the RAB line of that name; an unknown name without Kategori is a problem");
+  const actualPlan = planRabActualImport({ parsed: resolved.parsed, startsOn: "2026-11-03", existingBudget: [{ id: "l-sewa", period: "weekly", category: "Lapangan", categoryOrder: 1, name: "Sewa lapangan", itemOrder: 1, isAsset: false }], existingExtras: [], existingCosts: [{ budgetItemId: "l-sewa", actualItemId: null, spentOn: "2026-11-10", amount: 3000000 }] });
+  eq(actualPlan.costs.map((c) => [c.budgetItemId ? "rab" : "extra", c.spentOn, c.week, c.amount]), [["rab", "2026-11-03", 1, 3000000], ["extra", "2026-11-05", 1, 250000]], "template RAB Actual: costs keep their own date and week; a cost already recorded is skipped");
+  eq([actualPlan.newExtras.map((e) => e.name), actualPlan.summary.costs.duplicates], [["Air mineral"], 1], "template RAB Actual: a name outside the RAB becomes an extra line");
 }
 
 /* ── Formatting ── */

@@ -55,7 +55,7 @@ async function main() {
   const owner = scopeOf({ role: "owner", unitId: null });
 
   const stamp = Date.now().toString(36).toUpperCase();
-  const codes = { liga: `ZZTEST-L-${stamp}`, school: `ZZTEST-S-${stamp}`, other: `ZZTEST-O-${stamp}` };
+  const codes = { liga: `ZZTEST-L-${stamp}`, school: `ZZTEST-S-${stamp}`, other: `ZZTEST-O-${stamp}`, excel: `ZZTEST-X-${stamp}` };
   const owners = [{ name: "Pemilik A", percent: "60", capital: "10.000.000" }, { name: "Pemilik B", percent: "40", capital: "" }];
   const parse = (code: string, type: string) => {
     const parsed = makeNewUnitSchema(t).safeParse({ code, name: `Uji ${code}`, type, description: "", programWeeks: "10", programStartsOn: "2026-10-05", owners });
@@ -320,8 +320,43 @@ async function main() {
     const schoolEmpty = (await getAllUnitFigures([{ id: school.id, type: "sekolah_bola", programWeeks: 10, leagueFinishedOn: null }])).get(school.id)!;
     eq2(schoolEmpty.payout.final, 0, "Dividen: when every owner took everything nothing is left for the Owner overview");
 
+    /* ── Import Excel (templates): RAB Budget, then RAB Actual, on a fresh Liga unit ── */
+    {
+      const { importRabBudgetUpload, importRabActualUpload, previewRabBudgetUpload } = await import("@/lib/finance/rab-actual-import");
+      const { buildWorkbook } = await import("@/lib/finance/excel/xlsx-writer");
+      const sheet = (name: string, header: string[], rows: (string | number | null)[][]) =>
+        buildWorkbook([{ name, columns: [], rows: [["judul"], [], [], header.map((value) => ({ value, style: "header" as const })), ...rows] }]);
+      const xu = await createUnit(t, parse(codes.excel, "liga"), actor.id);
+      const budgetFile = sheet("RAB Budget", ["Jenis Biaya", "Kategori", "Nama Biaya", "Jumlah Satuan", "Harga Satuan (Rp)", "Aset (Ya/Tidak)"], [
+        ["Mingguan", "Lapangan", "Sewa lapangan", 2, 1500000, "Tidak"],
+        ["Bulanan", "Peralatan", "Sound sistem", 1, 7500000, "Ya"],
+      ]);
+      const b1 = await importRabBudgetUpload(t, { unitId: xu.id, fileName: "b.xlsx", bytes: budgetFile, actorId: actor.id });
+      const lines = await db.select().from(s.finBudgetItems).where(eq(s.finBudgetItems.businessUnitId, xu.id));
+      eq2([b1.plan.summary.lines.created, lines.map((l) => [l.name, l.quantity * l.unitPrice, l.isAsset]).sort()], [2, [["Sewa lapangan", 3000000, false], ["Sound sistem", 7500000, true]]], "Import Excel: RAB Budget lines are saved from the template");
+      const again = await previewRabBudgetUpload(t, { unitId: xu.id, fileName: "b.xlsx", bytes: budgetFile });
+      ok(again.preview.problems.some((p) => /sudah ada/.test(p)) && again.plan.newLines.length === 0, "Import Excel: the same RAB Budget file again adds nothing");
+
+      const actualFile = sheet("RAB Actual", ["Tanggal", "Jenis Biaya", "Kategori", "Keterangan Biaya", "Nominal (Rp)"], [
+        ["2026-10-06", null, null, "Sewa lapangan", 3000000],
+        ["2026-10-20", null, null, "Sound sistem", 7250000],
+        ["2026-10-21", "Mingguan", "Konsumsi", "Air mineral", 250000],
+      ]);
+      const a1 = await importRabActualUpload(t, { unitId: xu.id, fileName: "a.xlsx", bytes: actualFile, startsOn: null, actorId: actor.id });
+      const costs = await listActualCosts(xu.id);
+      const assets = await db.select().from(s.finAssets).where(eq(s.finAssets.businessUnitId, xu.id));
+      const extras = await db.select().from(s.finActualItems).where(eq(s.finActualItems.businessUnitId, xu.id));
+      eq2(
+        [a1.plan.summary.costs.imported, costs.map((c) => [c.spentOn, c.amount]).sort(), assets.map((x) => [x.name, x.amount]), extras.map((e) => e.name)],
+        [3, [["2026-10-06", 3000000], ["2026-10-20", 7250000], ["2026-10-21", 250000]], [["Sound sistem", 7250000]], ["Air mineral"]],
+        "Import Excel: RAB Actual costs keep their dates, an Aset line makes an asset, an unknown name becomes a line outside the RAB",
+      );
+      const refused = await importRabActualUpload(t, { unitId: xu.id, fileName: "a.xlsx", bytes: actualFile, startsOn: null, actorId: actor.id }).then(() => "accepted", (e: Error) => e.message);
+      ok(/sudah tercatat/.test(refused) && (await listActualCosts(xu.id)).length === 3, `Import Excel: the same RAB Actual file again is refused → “${refused}”`);
+    }
+
     const admin = scopeOf({ role: "unit_admin", unitId: school.id });
-    const pinned = await save(liga, "asset", parseKind("asset", { purchasedOn: "2026-10-05", name: "Dipaksa", amount: "1", proofUrl: "", note: "" }), null, admin);
+    const pinned =await save(liga, "asset", parseKind("asset", { purchasedOn: "2026-10-05", name: "Dipaksa", amount: "1", proofUrl: "", note: "" }), null, admin);
     eq2(pinned.unitId, school.id, "Access: a unit admin is pinned to their own unit even when the form names another one");
     await rejects(save(liga, "asset", parseKind("asset", { purchasedOn: "2026-10-05", name: "x", amount: "1", proofUrl: "", note: "" }), manualRow.id, admin), "Access: a unit admin cannot edit a row of another unit", /tidak ditemukan/);
     await rejects(deleteFinanceRecord({ t, actor, scope: admin, kind: "asset", id: manualRow.id }), "Access: a unit admin cannot delete a row of another unit", /tidak ditemukan/);

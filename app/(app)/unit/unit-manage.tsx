@@ -54,8 +54,8 @@ function Footer({ pending, saveLabel, error, onCancel }: { pending: boolean; sav
           {error}
         </p>
       )}
-      {/* stays at the bottom of the scrolling dialog, so the save button is always in reach */}
-      <div className="sticky bottom-0 -mx-6 -mb-6 flex gap-2 border-t border-line bg-surface px-6 py-3">
+      {/* at the end of the form, under the last field (not pinned to the dialog's bottom edge) */}
+      <div className="flex gap-2 border-t border-line pt-4">
         <Button type="submit" disabled={pending}>
           {pending ? <Loader2 className="animate-spin" /> : <Save />}
           {pending ? t("Menyimpan…") : saveLabel}

@@ -25,7 +25,7 @@ import { getI18n } from "@/lib/i18n/server";
 import { AddRecordButton } from "../forms";
 import { ActualTable, type ActualLineView, type WeekColumn } from "./actual-table";
 import type { DetailCost } from "./cost-detail";
-import { RabActualUpload } from "./upload-dialog";
+import { RabExcelUpload } from "./upload-dialog";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getI18n()).t("RAB Actual") };
@@ -202,7 +202,7 @@ export default async function ActualBudgetPage({ params }: { params: Promise<{ c
         actions={
           canInput && (
             <>
-              <RabActualUpload unitId={unit.id} unitStartsOn={unit.programStartsOn} />
+              <RabExcelUpload unitId={unit.id} unitStartsOn={unit.programStartsOn} target="actual" />
               <AddRecordButton kind="actualitem" ctx={formCtx} variant="outline" />
               <AddRecordButton kind="actualcost" ctx={formCtx} />
             </>
@@ -310,10 +310,10 @@ export default async function ActualBudgetPage({ params }: { params: Promise<{ c
           )}
           {renderSection(grid.monthly, t("Biaya bulanan"), t("Biaya yang dikeluarkan sekali (peralatan, hadiah, seragam, perizinan). Tetap dicatat di minggu tempat dibayar."))}
 
-          <section className="mt-4 border-2 border-black bg-white" aria-label={t("Total estimasi OPEX")}>
+          <section className="mt-4 border-2 border-black bg-white" aria-label={t("Total RAB Budget")}>
             <div className="grid gap-px bg-black sm:grid-cols-[1.4fr_1fr_1fr]">
               <div className="bg-black p-4 text-white">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">{t("Total estimasi OPEX")}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">{t("Total RAB Budget")}</p>
                 <p className="mt-1 text-xs text-white/70">{t("Mingguan + bulanan")}</p>
               </div>
               <div className="bg-white p-4">
