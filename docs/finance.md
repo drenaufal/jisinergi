@@ -62,8 +62,10 @@ bisa disimpan di jenis unit yang salah (ditolak di server, bukan hanya disembuny
 | **Dividen Liga** | (uang modal + uang masuk registrasi + uang masuk match fee) − **RAB Actual** |
 | **Dividen Sekolah Bola** | (uang modal + pemasukan) − pengeluaran (sejak 15-11-2026; dulu pemasukan − pengeluaran saja) |
 | **Sisa saldo Sekolah Bola** | pemasukan − pengeluaran, **per bulan**; akumulasi = jumlah semua bulan (tanpa modal) |
+| **Sisa saldo per bulan di menu Dividen** (Sekolah Bola) | (uang modal + pemasukan) − pengeluaran bulan itu (sejak 16-11-2026); modal tanpa tanggal (saldo awal) masuk ke bulan pertama, jadi jumlah semua bulan = dividen |
 | **Sisa dividen unit** | dividen unit − yang sudah diambil semua pemilik. Unit Liga yang event-nya belum selesai = 0. Hanya informasi di Ringkasan Owner |
 | **Akumulasi dividen Owner** | Σ yang sudah diambil pemilik bertanda “Ringkasan Owner” di unit Liga + Σ yang sama di unit Sekolah Bola |
+| **Pemilik bertanda di Ringkasan Owner** | di baris legenda (sebelah Liga / Sekolah Bola): nama tiap pemilik bertanda + dividen yang sudah diambilnya (digabung per nama atas semua unit); tooltip menyebut unit dan bagian dividennya |
 | **Progres target** | akumulasi ÷ Rp 3.000.000.000 (akumulasi negatif dihitung 0%; bisa melebihi 100%) |
 | **Akumulasi modal Owner** | Σ modal semua unit, Liga dan Sekolah Bola (tampil di Ringkasan Owner, dengan tabel modal per unit) |
 | **Akumulasi aset Owner** | Σ aset semua unit, Liga dan Sekolah Bola |

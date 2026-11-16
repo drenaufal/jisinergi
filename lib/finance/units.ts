@@ -165,7 +165,7 @@ export async function updateUnitLogin(t: TFunction, userId: string, input: z.out
 /** Every unit's owners with their shares, in the order they were entered. */
 export async function listUnitOwners() {
   return db
-    .select({ unitId: finUnitOwners.businessUnitId, name: finUnitOwners.name, shareBp: finUnitOwners.shareBp, inOverview: finUnitOwners.inOverview })
+    .select({ unitId: finUnitOwners.businessUnitId, name: finUnitOwners.name, shareBp: finUnitOwners.shareBp, inOverview: finUnitOwners.inOverview, takenAmount: finUnitOwners.takenAmount })
     .from(finUnitOwners)
     .orderBy(asc(finUnitOwners.position), asc(finUnitOwners.createdAt));
 }

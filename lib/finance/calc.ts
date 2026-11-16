@@ -268,23 +268,34 @@ export function incomeByKind(payments: readonly PaymentAmounts[]) {
   };
 }
 
-export type MonthRow = { month: string; income: number; expense: number; dividend: number };
+export type MonthRow = { month: string; capital: number; income: number; expense: number; dividend: number };
 
 /**
- * Sisa saldo (Sekolah Bola) per bulan = Pemasukan − Pengeluaran. Cash basis: a payment counts in the month
- * it was received, an expense in the month it was spent. Months with neither are not listed.
+ * Sisa saldo (Sekolah Bola) per bulan = (Uang modal + Pemasukan) − Pengeluaran of that month. Cash basis: a payment
+ * counts in the month it was received, an expense in the month it was spent, modal in the month it was put in. Modal
+ * without a date is the opening balance ("Saldo Awal"): it goes to the first month (or `undatedMonth` when there is
+ * none). Without `capital` the rows are pemasukan − pengeluaran only. Months with nothing are not listed.
  */
-export function schoolMonthly(payments: readonly PaymentAmounts[], expenses: readonly ExpenseAmounts[]): MonthRow[] {
+export function schoolMonthly(
+  payments: readonly PaymentAmounts[],
+  expenses: readonly ExpenseAmounts[],
+  capital: readonly { amount: number; investedOn: string | null }[] = [],
+  undatedMonth?: string,
+): MonthRow[] {
   const months = new Map<string, MonthRow>();
   const row = (month: string) => {
     let r = months.get(month);
-    if (!r) months.set(month, (r = { month, income: 0, expense: 0, dividend: 0 }));
+    if (!r) months.set(month, (r = { month, capital: 0, income: 0, expense: 0, dividend: 0 }));
     return r;
   };
   for (const p of payments) row(monthOf(p.paidOn)).income += p.amount;
   for (const e of expenses) row(monthOf(e.spentOn)).expense += e.amount;
+  for (const c of capital) if (c.investedOn) row(monthOf(c.investedOn)).capital += c.amount;
+  const undated = sum(capital.filter((c) => !c.investedOn), (c) => c.amount);
+  const first = [...months.keys()].sort()[0] ?? undatedMonth;
+  if (undated && first) row(first).capital += undated;
   return [...months.values()]
-    .map((r) => ({ ...r, dividend: r.income - r.expense }))
+    .map((r) => ({ ...r, dividend: r.capital + r.income - r.expense }))
     .sort((a, b) => a.month.localeCompare(b.month));
 }
 
