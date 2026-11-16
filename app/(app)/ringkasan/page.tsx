@@ -180,16 +180,22 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                     <span className="flex items-center gap-2"><span className="size-3 bg-black" /> Liga {fmt.rupiahCompact(owner.liga)}</span>
                     <span className="flex items-center gap-2"><span className="hatch size-3 border border-black" /> Sekolah Bola {fmt.rupiahCompact(owner.sekolahBola)}</span>
                     {/* who the accumulated figure is made of: each flagged owner and the dividend they took (counted to the target) */}
-                    {flaggedOwners.map((o, i) => (
-                      <span
-                        key={o.name}
-                        className={cn("flex items-center gap-1.5", i === 0 && "sm:border-l sm:border-line sm:pl-6")}
-                        title={`${o.name} · ${o.units.join(", ")} · diambil ${fmt.rupiah(o.taken)} dari bagian dividen ${fmt.rupiah(o.share)}`}
-                      >
-                        <span className="font-semibold text-ink">{o.name}</span>
-                        <span className="tabular-nums">{fmt.rupiahCompact(o.taken)}</span>
+                    {flaggedOwners.length > 0 && (
+                      <span className="flex flex-wrap gap-x-4 gap-y-1 border-l border-line pl-4 sm:pl-6">
+                        {flaggedOwners.map((o) => (
+                          <span
+                            key={o.name}
+                            className="flex items-center gap-1.5"
+                            title={`${o.name} · ${o.units.join(", ")} · diambil ${fmt.rupiah(o.taken)} dari bagian dividen ${fmt.rupiah(o.share)}`}
+                          >
+                            <span className="font-semibold text-ink">{o.name}</span>
+                            <span className="tabular-nums">
+                              {fmt.rupiahCompact(o.share)} <span className="text-ink-muted">· diambil {fmt.rupiahCompact(o.taken)}</span>
+                            </span>
+                          </span>
+                        ))}
                       </span>
-                    ))}
+                    )}
                   </div>
                 </div>
               </div>
