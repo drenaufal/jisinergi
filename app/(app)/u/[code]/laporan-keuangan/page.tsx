@@ -84,8 +84,8 @@ export default async function FinancialReportPage({ params }: { params: Promise<
         </div>
       </section>
 
-      <Notice className="mt-4" title="Sisa saldo di sini berbeda dengan menu Dividen">
-        Sisa Saldo laporan ini dimulai dari Saldo Awal (modal). Dividen Sekolah Bola di menu Dividen dan Ringkasan Owner hanya menghitung pemasukan − pengeluaran, tanpa modal.
+      <Notice className="mt-4" title="Sisa Saldo di sini sama dengan dividen">
+        Sisa Saldo laporan ini = Saldo Awal (modal) + total masuk − total keluar, sama dengan rumus dividen Sekolah Bola di menu Dividen: (uang modal + pemasukan) − pengeluaran.
       </Notice>
 
       <Card className="mt-4">

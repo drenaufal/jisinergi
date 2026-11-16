@@ -22,7 +22,7 @@ Unit bisnis ada dua jenis, dengan menu berbeda (`lib/finance/unit-types.ts` adal
 | | Laporan Keuangan | uang masuk dan keluar dalam satu daftar seperti lembar “Laporan Keuangan” di Excel: saldo awal, total masuk, total keluar, sisa saldo (hanya baca) |
 | | Aset | peralatan dan sarana (juga terisi otomatis dari pengeluaran bertanda Aset) |
 | | Modal | uang yang disetor pemilik |
-| | Dividen | sisa saldo, pembagian ke pemilik dalam persen, dan uang yang sudah diambil tiap pemilik |
+| | Dividen | rumus dividen ((modal + pemasukan) − pengeluaran), pembagian ke pemilik dalam persen, dan uang yang sudah diambil tiap pemilik |
 
 Setiap unit bisa punya **logo** (diunggah saat unit dibuat atau lewat *Ubah unit*; JPG/PNG/WEBP/GIF, maks 5 MB). Logo tampil di menu samping dan di
 Kelola Unit Bisnis; tanpa logo, yang tampil huruf pertama nama unit. Formulir unit dan semua pop-up lainnya **bisa digulir**: judulnya tetap di atas,
@@ -60,7 +60,8 @@ bisa disimpan di jenis unit yang salah (ditolak di server, bukan hanya disembuny
 | Angka | Rumus |
 |---|---|
 | **Dividen Liga** | (uang modal + uang masuk registrasi + uang masuk match fee) − **RAB Actual** |
-| **Dividen Sekolah Bola** = **sisa saldo** | pemasukan − pengeluaran, **per bulan**; akumulasi = jumlah semua bulan |
+| **Dividen Sekolah Bola** | (uang modal + pemasukan) − pengeluaran (sejak 15-11-2026; dulu pemasukan − pengeluaran saja) |
+| **Sisa saldo Sekolah Bola** | pemasukan − pengeluaran, **per bulan**; akumulasi = jumlah semua bulan (tanpa modal) |
 | **Sisa dividen unit** | dividen unit − yang sudah diambil semua pemilik. Unit Liga yang event-nya belum selesai = 0. Hanya informasi di Ringkasan Owner |
 | **Akumulasi dividen Owner** | Σ yang sudah diambil pemilik bertanda “Ringkasan Owner” di unit Liga + Σ yang sama di unit Sekolah Bola |
 | **Progres target** | akumulasi ÷ Rp 3.000.000.000 (akumulasi negatif dihitung 0%; bisa melebihi 100%) |
@@ -72,14 +73,14 @@ Rincian:
 
 - *RAB Actual* = jumlah semua biaya actual yang tercatat di menu RAB Actual, termasuk baris di luar RAB Budget. *Uang modal* = semua
   modal yang disetor. *Registrasi* = DP + pelunasan yang sudah **diterima**. *Match fee* = laga × tarif per laga.
-  *RAB Budget* (estimasi OPEX = biaya mingguan × `programWeeks` unit + biaya bulanan) tetap tampil di menunya, tetapi **tidak lagi
+  *RAB Budget* (Total RAB Budget = biaya mingguan × `programWeeks` unit + biaya bulanan) tetap tampil di menunya, tetapi **tidak lagi
   dipakai di rumus dividen**.
 - Sekolah Bola memakai dasar kas: pembayaran dihitung di bulan **tanggal dibayar**, pengeluaran di bulan **tanggal pengeluaran**.
   Bulan yang hanya punya pengeluaran menghasilkan sisa saldo negatif. **Diskon tidak mengurangi pemasukan** — pemasukan adalah
   uang yang benar-benar diterima; diskon hanya dicatat sebagai informasi.
-- **Modal Sekolah Bola tidak mengubah dividen** (rumus dari spesifikasi hanya pemasukan − pengeluaran); modal dan aset
-  ditampilkan sendiri. Hanya **Sisa Saldo di Laporan Keuangan** yang dimulai dari saldo awal, seperti lembar Excel-nya — halaman itu
-  mencantumkan perbedaan ini.
+- **Modal Sekolah Bola masuk ke dividen** (sejak 15-11-2026): dividen = (uang modal + pemasukan) − pengeluaran, dengan uang modal = semua
+  baris Modal unit (seperti Liga). Karena Saldo Awal Laporan Keuangan = modal, **Sisa Saldo Laporan Keuangan sama dengan dividen**.
+  “Sisa saldo” di Ringkasan unit, Pemasukan, dan tabel per bulan tetap pemasukan − pengeluaran (tanpa modal).
 - Hasil Dividen Liga bisa **negatif** bila RAB Actual melebihi modal + registrasi + match fee.
 
 ## 4. RAB Budget dan aset
@@ -102,7 +103,7 @@ RAB Actual adalah pengurang di rumus dividen Liga: totalnya (semua biaya actual)
 
 Halaman seperti lembar Excel “Weekly / Monthly Forecasting dan Actual”: baris = keterangan biaya, kolom = budget, Week 1…n, Total, Sisa.
 Biaya **mingguan** dan **bulanan** ada di dua bagian terpisah (nomor kategori dan total masing-masing), dengan
-**Total estimasi OPEX** (mingguan + bulanan) di bawahnya.
+**Total RAB Budget** (mingguan + bulanan) di bawahnya.
 
 - Keterangan biaya dan budget diambil dari RAB. Budget yang tampil adalah nilai baris RAB (mingguan = per minggu, bulanan =
   sekali); **Sisa** = budget seluruh program (mingguan × jumlah minggu) − total actual, bertanda ▲ bila melebihi budget.
@@ -115,7 +116,7 @@ Biaya **mingguan** dan **bulanan** ada di dua bagian terpisah (nomor kategori da
   ke kolom minggu sesuai tanggalnya dan biaya di minggu yang sama dijumlahkan.
 - Klik nama keterangan biaya untuk melihat rincian: tanggal bayar, minggu, nominal, bukti, catatan — dengan tombol ubah/hapus.
   Catatan sel Excel (mis. “Kopi dan rujak”) menjadi catatan biaya.
-- **Unggah Excel** (tombol di kepala halaman): unggah file seperti “file RAB Actual.xlsx” (RAB di kiri, Week 1… di kanan). File dibaca dan diperiksa dulu
+- **Import Excel** (tombol di kepala halaman, juga di RAB Budget — lihat §5c). Selain template, RAB Actual masih menerima file lama seperti “file RAB Actual.xlsx” (RAB di kiri, Week 1… di kanan). File dibaca dan diperiksa dulu
   (pratinjau: berapa baris RAB baru, berapa biaya, total yang tertulis di sheet harus cocok), baru disimpan setelah *Simpan ke RAB Actual*.
   Baris RAB yang sudah ada di unit dipakai ulang (nama dicocokkan tanpa memandang huruf besar/kecil), hanya yang belum ada yang dibuat. Biaya
   bertanggal hari pertama minggunya; bila unit belum punya tanggal mulai program, tanggal minggu 1 diisi di formulir unggah dan disimpan sebagai
@@ -136,6 +137,23 @@ Biaya **mingguan** dan **bulanan** ada di dua bagian terpisah (nomor kategori da
   disebut di kartu “Uang masuk”, tetapi **tidak ikut rumus dividen** (rumus dari spesifikasi hanya modal + registrasi +
   match fee).
 
+## 5c. Import Excel: RAB Budget dan RAB Actual (template)
+
+Tombol **Import Excel** di kepala halaman RAB Budget dan RAB Actual membuka dialog dua langkah: **unduh template** (dibuat untuk unit itu,
+`GET /api/finance/rab-template?unitId=…&kind=budget|actual`) lalu **unggah** file yang sudah diisi (`POST /api/finance/rab-actual-upload`
+dengan `target=budget|actual`, `mode=preview` lalu `mode=import`). Template ditulis oleh `lib/finance/excel/xlsx-writer.ts` (tanpa dependensi)
+dan dibaca oleh `lib/finance/excel/rab-templates.ts`; kolom dicari dari judulnya di baris 4, data mulai baris 5, sheet *Petunjuk* berisi contoh.
+
+- **RAB Budget**: kolom Jenis Biaya (Mingguan/Bulanan, drop-down) · Kategori · Nama Biaya · Jumlah Satuan (kosong = 1) · Harga Satuan ·
+  Total (rumus, tidak dibaca) · Aset (Ya/Tidak) · Catatan. Baris yang jenis, kategori, dan namanya sudah ada di unit **dilewati** (baris RAB tidak
+  bisa diubah); nama ganda di dalam file ditolak. Kategori yang sudah ada dipakai dengan ejaannya.
+- **RAB Actual**: kolom Tanggal · Jenis Biaya · Kategori · Keterangan Biaya · Nominal · Catatan, satu baris per biaya dengan **tanggal sebenarnya**
+  (minggu dihitung dari tanggal). Sheet *Daftar RAB* berisi baris RAB unit itu (juga drop-down di kolom Keterangan Biaya). Kategori/Jenis boleh kosong
+  bila namanya ada di daftar; nama lain menjadi baris di luar RAB (pratinjau menyebutnya). Biaya yang sama (baris, tanggal, nominal) dilewati;
+  biaya pada baris Aset membuat aset. Template tidak memerlukan tanggal mulai program.
+- Setiap baris yang salah disebut dengan nomor baris Excel-nya; file tidak bisa disimpan selama masih ada masalah.
+- Tanggal paling aman ditulis 2026-11-03: Excel membaca 05/11/2026 menurut pengaturan bahasa komputernya (en-US = 11 Mei).
+
 ## 6. Pemasukan Sekolah Bola (dari formulir “SEKOLAH BOLA”)
 
 Formulir Excel punya satu baris per anak dengan kolom: Nama Anak, Tgl Bergabung, Uang/Bukti/Diskon Registrasi,
@@ -155,7 +173,7 @@ Aturan:
 - **Uang jersey tidak dicatat sebagai pemasukan.** Jenis pembayaran jersey dihapus dari form, kartu, dan perhitungan. Baris
   `jersey` lama (bila ada) dibiarkan di database tetapi tidak ditampilkan dan tidak dihitung.
 - Satu registrasi per siswa, satu iuran per siswa per bulan.
-- Kartu **Sisa saldo** di halaman Pemasukan = pemasukan − pengeluaran bulan ini (dividen per bulan), dengan akumulasinya.
+- Kartu **Sisa saldo** di halaman Pemasukan = pemasukan − pengeluaran bulan ini, dengan akumulasinya (tanpa modal; dividen ada di menu Dividen).
 
 Tab **Siswa** menampilkan satu baris per anak (seperti baris Excel) dengan tombol **Bayar**; tab **Pembayaran** menampilkan
 semua pembayaran, bisa difilter per jenis.
@@ -176,7 +194,7 @@ Halaman hanya-baca `/u/<kode>/laporan-keuangan` yang menampilkan lembar “LAPOR
   Cash Out = Pengeluaran, Saldo Awal = total Modal unit.
 - Urutan: tanggal terlama dulu; baris pada hari yang sama mengikuti urutan input. Nomor dihitung ulang dari urutan itu, jadi bisa
   berbeda dari kolom No di Excel (Excel menaruh gaji bulan April–Mei di bawah baris Agustus–September).
-- Sisa Saldo = Saldo Awal + Total Masuk − Total Keluar. Ini **bukan** angka Dividen: dividen Sekolah Bola tidak memasukkan modal.
+- Sisa Saldo = Saldo Awal + Total Masuk − Total Keluar. Sejak 15-11-2026 ini **sama dengan** Dividen Sekolah Bola ((modal + pemasukan) − pengeluaran).
   Logikanya ada di `financialReport` (`lib/finance/calc.ts`).
 
 ## 8. Peran dan akses

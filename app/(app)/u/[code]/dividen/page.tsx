@@ -41,7 +41,7 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
   const owners = await listOwners(unit.id);
   const ligaFigures = isLiga ? unitFigures(await ligaDataset(unit.id, unit.programWeeks)) : null;
   const school = isLiga ? null : await schoolDataset(unit.id);
-  const schoolTotals = school ? schoolFigures({ students: school.students.length, payments: school.payments, expenses: school.expenses }) : null;
+  const schoolTotals = school ? schoolFigures({ students: school.students.length, payments: school.payments, expenses: school.expenses, capital: school.capital }) : null;
 
   const dividend = ligaFigures ? ligaFigures.dividend.value : (schoolTotals?.dividend ?? 0);
   // A Liga only has a dividend once its event is over; until then the figures are an estimate (not takeable, not counted for the Owner).
@@ -66,7 +66,8 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
         { op: "−", label: t("RAB Actual"), value: fmt.rupiah(ligaFigures.dividend.actual), href: link("rab-actual"), hint: t("Semua biaya yang benar-benar keluar, di dalam maupun di luar RAB Budget") },
       ]
     : [
-        { label: t("Total pemasukan"), value: fmt.rupiah(schoolTotals?.income.total ?? 0), href: link("pemasukan"), hint: t("Registrasi + iuran bulanan") },
+        { label: t("Uang modal"), value: fmt.rupiah(schoolTotals?.capital.total ?? 0), href: link("modal") },
+        { op: "+", label: t("Total pemasukan"), value: fmt.rupiah(schoolTotals?.income.total ?? 0), href: link("pemasukan"), hint: t("Registrasi + iuran bulanan") },
         { op: "−", label: t("Total pengeluaran"), value: fmt.rupiah(schoolTotals?.expense ?? 0), href: link("pengeluaran") },
       ];
 
@@ -85,7 +86,7 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
         intro={
           isLiga
             ? t("Bagian atas menghitung dividen unit ini: uang modal ditambah uang masuk registrasi dan match fee, dikurangi RAB Actual (biaya yang benar-benar keluar). Angkanya diambil otomatis dari menu lain. Di bawahnya, dividen itu dibagi ke para pemilik unit sesuai persentase masing-masing.")
-            : t("Bagian atas menghitung dividen unit ini: pemasukan dikurangi pengeluaran (sisa saldo). Angkanya diambil otomatis dari menu Pemasukan dan Pengeluaran. Di bawahnya, dividen itu dibagi ke para pemilik unit sesuai persentase masing-masing.")
+            : t("Bagian atas menghitung dividen unit ini: uang modal ditambah pemasukan, dikurangi pengeluaran. Angkanya diambil otomatis dari menu Modal, Pemasukan, dan Pengeluaran. Di bawahnya, dividen itu dibagi ke para pemilik unit sesuai persentase masing-masing.")
         }
         terms={[
           { term: t("Dividen (rumus)"), text: t("Hasil perhitungan otomatis. Berubah sendiri saat data di menu lain berubah.") },
@@ -122,7 +123,7 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
       <Formula
         className="mb-4"
         title={isLiga ? t("Perhitungan dividen — Liga") : t("Perhitungan dividen — Sekolah Bola")}
-        formula={isLiga ? t("Dividen = (Uang modal + Uang masuk registrasi + Uang masuk match fee) − RAB Actual") : t("Dividen = Pemasukan − Pengeluaran (sisa saldo)")}
+        formula={isLiga ? t("Dividen = (Uang modal + Uang masuk registrasi + Uang masuk match fee) − RAB Actual") : t("Dividen = (Uang modal + Pemasukan) − Pengeluaran")}
         lines={lines}
         resultLabel={generated ? t("Dividen (rumus)") : t("Dividen (perkiraan)")}
         result={fmt.rupiah(dividend)}
@@ -130,7 +131,7 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
           dividend < 0
             ? isLiga
               ? t("Hasil negatif: RAB Actual sudah melebihi uang modal, registrasi, dan match fee bersama-sama. Bagian tiap pemilik juga negatif.")
-              : t("Hasil negatif: pengeluaran lebih besar dari pemasukan. Bagian tiap pemilik juga negatif.")
+              : t("Hasil negatif: pengeluaran lebih besar dari uang modal dan pemasukan bersama-sama. Bagian tiap pemilik juga negatif.")
             : generated
               ? t("Dari hasil ini, yang sudah diambil pemilik bertanda “Ringkasan Owner” ikut dijumlahkan ke akumulasi dividen Owner.")
               : t("Belum dijumlahkan ke akumulasi dividen Owner sampai event liga ditandai selesai.")
@@ -138,7 +139,7 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <Kpi label={generated ? t("Dividen (rumus)") : t("Dividen (perkiraan)")} value={fmt.rupiahCompact(dividend)} full={fmt.rupiah(dividend)} icon={<Calculator className="size-4" />} block="red" hint={isLiga ? t("(modal + registrasi + match fee) − RAB Actual") : t("Pemasukan − pengeluaran")} />
+        <Kpi label={generated ? t("Dividen (rumus)") : t("Dividen (perkiraan)")} value={fmt.rupiahCompact(dividend)} full={fmt.rupiah(dividend)} icon={<Calculator className="size-4" />} block="red" hint={isLiga ? t("(modal + registrasi + match fee) − RAB Actual") : t("(modal + pemasukan) − pengeluaran")} />
         <Kpi
           label={t("Sudah diambil")}
           value={fmt.rupiahCompact(takenTotal)}
@@ -237,7 +238,7 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
       {schoolTotals && schoolTotals.months.length > 0 && (
         <Card className="mt-4">
           <CardContent className="space-y-4">
-            <BlockTitle title={t("Sisa saldo per bulan")} hint={t("Pemasukan − pengeluaran. Jumlah semua bulan adalah dividen di atas.")} />
+            <BlockTitle title={t("Sisa saldo per bulan")} hint={t("Pemasukan − pengeluaran per bulan. Jumlah semua bulan ditambah uang modal adalah dividen di atas.")} />
             <Table>
               <THead>
                 <TR className="hover:bg-transparent">
