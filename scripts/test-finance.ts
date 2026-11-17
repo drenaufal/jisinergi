@@ -201,10 +201,14 @@ const expenses = [
 eq(incomeByKind(payments), { registration: 900000, monthly: 350000, total: 1250000, discounts: 150000 }, "PEMASUKAN: registration + monthly only (jersey money is not income); discounts are not money received");
 eq(monthOf("2026-03-14"), "2026-03", "month of a date");
 eq(schoolMonthly(payments, expenses), [
-  { month: "2026-08", income: 400000, expense: 700000, dividend: -300000 },
-  { month: "2026-09", income: 650000, expense: 600000, dividend: 50000 },
-  { month: "2026-10", income: 200000, expense: 600000, dividend: -400000 },
+  { month: "2026-08", capital: 0, income: 400000, expense: 700000, dividend: -300000 },
+  { month: "2026-09", capital: 0, income: 650000, expense: 600000, dividend: 50000 },
+  { month: "2026-10", capital: 0, income: 200000, expense: 600000, dividend: -400000 },
 ], "SISA SALDO SEKOLAH BOLA per bulan = pemasukan − pengeluaran (a month that spends more than it earns is negative)");
+const withModal = schoolMonthly(payments, expenses, [{ amount: 5000000, investedOn: null }, { amount: 1000000, investedOn: "2026-10-15" }, { amount: 200000, investedOn: "2026-12-01" }], "2026-11");
+eq(withModal.map((m) => [m.month, m.capital, m.dividend]), [["2026-08", 5000000, 4700000], ["2026-09", 0, 50000], ["2026-10", 1000000, 600000], ["2026-12", 200000, 200000]], "DIVIDEN page: sisa saldo per bulan = (modal + pemasukan) − pengeluaran; undated modal (saldo awal) goes to the first month");
+eq(sum(withModal, (m) => m.dividend), schoolFigures({ students: 2, payments, expenses, capital: [{ amount: 6200000, status: "outstanding" }] }).dividend, "DIVIDEN page: the months add up to the dividend");
+eq(schoolMonthly([], [], [{ amount: 300, investedOn: null }], "2026-11"), [{ month: "2026-11", capital: 300, income: 0, expense: 0, dividend: 300 }], "DIVIDEN page: undated modal with no other data lands in the given month");
 const school = schoolFigures({ students: 2, payments, expenses, capital: [] });
 eq([school.income.total, school.expense, school.net, school.dividend], [1250000, 1900000, -650000, -650000], "SEKOLAH BOLA: sisa saldo = Σ monthly = total pemasukan − total pengeluaran; without modal the dividend is the same");
 const schoolFull = schoolFigures({ students: 2, payments, expenses, assets: [{ amount: 750000 }, { amount: 120000 }], capital: [{ amount: 15000000, status: "outstanding" }, { amount: 10000000, status: "returned" }] });

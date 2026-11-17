@@ -3,7 +3,8 @@ import { Award, Calculator, HandCoins, Percent, Users, Wallet } from "lucide-rea
 import { can } from "@/lib/auth/rbac";
 import { loadUnitPage } from "@/lib/finance/access";
 import { ligaDataset, listOwners, schoolDataset } from "@/lib/finance/queries";
-import { schoolFigures, unitFigures } from "@/lib/finance/calc";
+import { schoolFigures, schoolMonthly, unitFigures } from "@/lib/finance/calc";
+import { currentMonth } from "@/lib/finance/period";
 import { BP_TOTAL, bpToField, overviewTaken, ownerPayouts } from "@/lib/finance/ownership";
 import { menuHref } from "@/lib/finance/unit-types";
 import { PageHeader } from "@/components/app/page-header";
@@ -42,6 +43,8 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
   const ligaFigures = isLiga ? unitFigures(await ligaDataset(unit.id, unit.programWeeks)) : null;
   const school = isLiga ? null : await schoolDataset(unit.id);
   const schoolTotals = school ? schoolFigures({ students: school.students.length, payments: school.payments, expenses: school.expenses, capital: school.capital }) : null;
+  // per month with the modal in it, so the months add up to the dividend
+  const schoolMonths = school ? schoolMonthly(school.payments, school.expenses, school.capital, currentMonth()) : [];
 
   const dividend = ligaFigures ? ligaFigures.dividend.value : (schoolTotals?.dividend ?? 0);
   // A Liga only has a dividend once its event is over; until then the figures are an estimate (not takeable, not counted for the Owner).
@@ -235,29 +238,43 @@ export default async function DividendsPage({ params }: { params: Promise<{ code
         </CardContent>
       </Card>
 
-      {schoolTotals && schoolTotals.months.length > 0 && (
+      {schoolTotals && schoolMonths.length > 0 && (
         <Card className="mt-4">
           <CardContent className="space-y-4">
-            <BlockTitle title={t("Sisa saldo per bulan")} hint={t("Pemasukan − pengeluaran per bulan. Jumlah semua bulan ditambah uang modal adalah dividen di atas.")} />
+            <BlockTitle
+              title={t("Sisa saldo per bulan")}
+              hint={t("Sisa saldo = (uang modal + pemasukan) − pengeluaran bulan itu. Modal tanpa tanggal (saldo awal) masuk ke bulan pertama. Jumlah semua bulan adalah dividen di atas.")}
+            />
             <Table>
               <THead>
                 <TR className="hover:bg-transparent">
                   <TH>{t("Bulan")}</TH>
+                  <TH className="text-right">{t("Uang modal")}</TH>
                   <TH className="text-right">{t("Pemasukan")}</TH>
                   <TH className="text-right">{t("Pengeluaran")}</TH>
                   <TH className="text-right">{t("Sisa saldo")}</TH>
                 </TR>
               </THead>
               <TBody>
-                {[...schoolTotals.months].reverse().map((m) => (
+                {[...schoolMonths].reverse().map((m) => (
                   <TR key={m.month}>
                     <TD className="font-medium text-ink">{fmt.date(`${m.month}-01`, { month: "long", year: "numeric" })}</TD>
+                    <TD className="text-right tabular-nums">{fmt.rupiah(m.capital)}</TD>
                     <TD className="text-right tabular-nums">{fmt.rupiah(m.income)}</TD>
                     <TD className="text-right tabular-nums">{fmt.rupiah(m.expense)}</TD>
                     <TD className="text-right font-semibold tabular-nums text-ink">{fmt.rupiah(m.dividend)}</TD>
                   </TR>
                 ))}
               </TBody>
+              <tfoot>
+                <tr className="border-t-2 border-ink bg-surface-2 text-sm font-bold tabular-nums text-ink">
+                  <td className="px-3 py-3 text-xs font-semibold uppercase tracking-wider">{t("Total")}</td>
+                  <td className="px-3 py-3 text-right">{fmt.rupiah(schoolTotals.capital.total)}</td>
+                  <td className="px-3 py-3 text-right">{fmt.rupiah(schoolTotals.income.total)}</td>
+                  <td className="px-3 py-3 text-right">{fmt.rupiah(schoolTotals.expense)}</td>
+                  <td className="px-3 py-3 text-right">{fmt.rupiah(schoolTotals.dividend)}</td>
+                </tr>
+              </tfoot>
             </Table>
           </CardContent>
         </Card>

@@ -18,6 +18,7 @@
     "db:studio": "drizzle-kit studio",
     "db:seed:owner": "tsx scripts/seed-owner.ts",
     "db:seed:demo": "tsx scripts/seed-demo.ts",
+    "db:seed:dividend-trial": "tsx scripts/seed-dividend-trial.ts",
     "db:import:excel": "tsx scripts/import-excel.ts",
     "db:import:ganador": "tsx scripts/import-ganador.ts"
   },

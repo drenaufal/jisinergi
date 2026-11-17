@@ -6,6 +6,7 @@ import { listVisibleUnits } from "@/lib/finance/access";
 import { getAllUnitFigures } from "@/lib/finance/queries";
 import { listUnitOwners } from "@/lib/finance/units";
 import { DIVIDEND_TARGET } from "@/lib/finance/config";
+import { ownerPayouts } from "@/lib/finance/ownership";
 import { ligaDividend, ownerDividend, sum } from "@/lib/finance/calc";
 import { UNIT_TYPE_LABEL, menuHref } from "@/lib/finance/unit-types";
 import { PageHeader } from "@/components/app/page-header";
@@ -29,9 +30,26 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
   const sp = await searchParams;
   const units = await listVisibleUnits(user);
   const [figures, allOwners] = await Promise.all([getAllUnitFigures(units), listUnitOwners()]);
-  const unitIds = new Set(units.map((u) => u.id));
-  // the owners flagged "Ringkasan Owner": only what they took is counted below
-  const flaggedNames = [...new Set(allOwners.filter((o) => o.inOverview && unitIds.has(o.unitId)).map((o) => o.name))];
+  // the owners flagged "Ringkasan Owner": only what they took is counted below. One entry per person (by name), over
+  // every unit they are flagged in: what they took (counted to the target) and their share of the dividends.
+  const flagged = new Map<string, { name: string; taken: number; share: number; units: string[] }>();
+  for (const u of units) {
+    const f = figures.get(u.id);
+    const unitOwners = allOwners.filter((o) => o.unitId === u.id);
+    if (!f || !unitOwners.some((o) => o.inOverview)) continue;
+    // a Liga whose event is not finished has no dividend to share yet
+    const shares = ownerPayouts(f.payout.generated ? f.dividend : 0, unitOwners);
+    unitOwners.forEach((o, i) => {
+      if (!o.inOverview) return;
+      const key = o.name.trim().toLowerCase();
+      const entry = flagged.get(key) ?? { name: o.name.trim(), taken: 0, share: 0, units: [] };
+      entry.taken += o.takenAmount;
+      entry.share += shares[i].share;
+      entry.units.push(u.name);
+      flagged.set(key, entry);
+    });
+  }
+  const flaggedOwners = [...flagged.values()].sort((a, b) => b.taken - a.taken || a.name.localeCompare(b.name));
 
   const selected = units.find((u) => u.code.toLowerCase() === sp.unit?.toLowerCase()) ?? null;
   const pool = selected ? units.filter((u) => u.id === selected.id) : units;
@@ -141,8 +159,8 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                   dari target <span className="font-semibold text-ink">{fmt.rupiah(owner.target)}</span> (3 M){sisaAll !== 0 && <> · {fmt.rupiah(sisaAll)} sisa dividen belum diambil</>}
                 </p>
                 <p className="mt-1 text-xs text-ink-muted">
-                  {flaggedNames.length ? (
-                    <>Pemilik bertanda: <span className="font-semibold text-ink">{flaggedNames.join(", ")}</span></>
+                  {flaggedOwners.length ? (
+                    <>Pemilik bertanda: <span className="font-semibold text-ink">{flaggedOwners.map((o) => o.name).join(", ")}</span></>
                   ) : (
                     <>Belum ada pemilik bertanda “Ringkasan Owner”. Tandai pemilik di menu Dividen unit → Ubah pembagian.</>
                   )}
@@ -161,6 +179,23 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                   <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs">
                     <span className="flex items-center gap-2"><span className="size-3 bg-black" /> Liga {fmt.rupiahCompact(owner.liga)}</span>
                     <span className="flex items-center gap-2"><span className="hatch size-3 border border-black" /> Sekolah Bola {fmt.rupiahCompact(owner.sekolahBola)}</span>
+                    {/* who the accumulated figure is made of: each flagged owner and the dividend they took (counted to the target) */}
+                    {flaggedOwners.length > 0 && (
+                      <span className="flex flex-wrap gap-x-4 gap-y-1 border-l border-line pl-4 sm:pl-6">
+                        {flaggedOwners.map((o) => (
+                          <span
+                            key={o.name}
+                            className="flex items-center gap-1.5"
+                            title={`${o.name} · ${o.units.join(", ")} · diambil ${fmt.rupiah(o.taken)} dari bagian dividen ${fmt.rupiah(o.share)}`}
+                          >
+                            <span className="font-semibold text-ink">{o.name}</span>
+                            <span className="tabular-nums">
+                              {fmt.rupiahCompact(o.share)} <span className="text-ink-muted">· diambil {fmt.rupiahCompact(o.taken)}</span>
+                            </span>
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
