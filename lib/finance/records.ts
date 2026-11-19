@@ -1,7 +1,8 @@
-import { and, eq, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   businessUnits,
+  finActualCosts,
   finActualItems,
   finAssets,
   finBudgetItems,
@@ -378,6 +379,61 @@ export async function deleteFinanceRecord(input: {
     }),
   });
   return { title: def.title(row) };
+}
+
+/**
+ * RAB Actual: removes one cost line ("keterangan biaya") with every real cost booked on it, the assets those costs made
+ * and their receipts. `lineKey` is "a:<id>" for a line added on the RAB Actual page (the line itself goes too) or
+ * "b:<id>" for a RAB Budget line: its costs always go, the line itself only with `withBudgetLine` (it is then gone
+ * from RAB Budget as well).
+ */
+export async function deleteActualLine(input: { t: TFunction; actor: Actor; scope: FinanceScope; lineKey: string; withBudgetLine: boolean }) {
+  const { t, actor, scope, lineKey, withBudgetLine } = input;
+  const [kind, id] = [lineKey.slice(0, 2), lineKey.slice(2)];
+  if ((kind !== "a:" && kind !== "b:") || !id) throw new FinanceRuleError(t("Data tidak ditemukan."));
+  const extra = kind === "a:";
+  const table = extra ? finActualItems : finBudgetItems;
+  const [line] = await db
+    .select({ id: table.id, businessUnitId: table.businessUnitId, name: table.name, category: table.category })
+    .from(table)
+    .where(eq(table.id, id))
+    .limit(1);
+  if (!line || !canTouchUnit(scope, line.businessUnitId)) throw new FinanceRuleError(t("Data tidak ditemukan."));
+  const removeLine = extra || withBudgetLine;
+
+  const onLine = extra ? eq(finActualCosts.actualItemId, id) : eq(finActualCosts.budgetItemId, id);
+  const costs = await db.select({ id: finActualCosts.id, amount: finActualCosts.amount, proofUrl: finActualCosts.proofUrl }).from(finActualCosts).where(onLine);
+  if (!removeLine && costs.length === 0) throw new FinanceRuleError(t("Keterangan biaya ini belum punya biaya actual."));
+  const costIds = costs.map((c) => c.id);
+  const assetProofs = costIds.length
+    ? (await db.select({ proofUrl: finAssets.proofUrl }).from(finAssets).where(inArray(finAssets.actualCostId, costIds))).map((a) => a.proofUrl)
+    : [];
+
+  await db.transaction(async (tx) => {
+    if (costIds.length) {
+      await tx.delete(finAssets).where(inArray(finAssets.actualCostId, costIds));
+      await tx.delete(finActualCosts).where(inArray(finActualCosts.id, costIds));
+    }
+    if (removeLine) await tx.delete(table).where(eq(table.id, id));
+  });
+  await releaseMedia(...costs.map((c) => c.proofUrl), ...assetProofs);
+
+  const spent = costs.reduce((s, c) => s + c.amount, 0);
+  await recordAudit({
+    actorId: actor.id,
+    actorName: actor.name,
+    actorRole: actor.role,
+    action: removeLine ? `finance.${extra ? "actualitem" : "budget"}.delete` : "finance.actualcost.delete",
+    entityType: extra ? "finance_actualitem" : "finance_budget",
+    entityId: id,
+    summary: auditText(
+      removeLine
+        ? "RAB Actual — keterangan biaya dihapus: {category} / {name} beserta {n} biaya actual (Rp {amount}) ({unit})"
+        : "RAB Actual — {n} biaya actual dihapus dari {category} / {name} (Rp {amount}) ({unit})",
+      { category: line.category, name: line.name, n: costs.length, amount: spent.toLocaleString("id-ID"), unit: await unitName(line.businessUnitId) },
+    ),
+  });
+  return { removedLine: removeLine, costs: costs.length };
 }
 
 /** One-click "Modal sudah kembali": status → returned, return date → today. */

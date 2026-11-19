@@ -50,6 +50,13 @@
       "when": 1794410109234,
       "tag": "0006_owner_overview_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1795092137575,
+      "tag": "0007_nabung_savings",
+      "breakpoints": true
     }
   ]
 }

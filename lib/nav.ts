@@ -30,6 +30,7 @@ export function buildNav(
 ): NavModel {
   const general: NavLink[] = [];
   if (can(user.role, "all-units")) general.push({ href: "/ringkasan", label: "Ringkasan Owner", hint: "Dividen dan target" });
+  if (can(user.role, "all-units")) general.push({ href: "/nabung", label: "Nabung", hint: "Tabungan pemilik" });
   if (can(user.role, "units:manage")) general.push({ href: "/unit", label: "Kelola Unit Bisnis", hint: "Unit dan akun login" });
   if (can(user.role, "audit:view")) general.push({ href: "/audit", label: "Jejak Audit", hint: "Riwayat perubahan data" });
 

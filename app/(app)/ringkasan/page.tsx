@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowUpRight, Building2, Landmark, Package, Target, Wallet } from "lucide-react";
+import { ArrowUpRight, Building2, Landmark, Package, PiggyBank, Target, Wallet } from "lucide-react";
 import { requireCapability } from "@/lib/auth/session";
 import { listVisibleUnits } from "@/lib/finance/access";
 import { getAllUnitFigures } from "@/lib/finance/queries";
 import { listUnitOwners } from "@/lib/finance/units";
 import { DIVIDEND_TARGET } from "@/lib/finance/config";
 import { ownerPayouts } from "@/lib/finance/ownership";
+import { listSavings, savingsBalances } from "@/lib/finance/savings";
 import { ligaDividend, ownerDividend, sum } from "@/lib/finance/calc";
 import { UNIT_TYPE_LABEL, menuHref } from "@/lib/finance/unit-types";
 import { PageHeader } from "@/components/app/page-header";
@@ -29,7 +30,10 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
   const { fmt } = await getI18n();
   const sp = await searchParams;
   const units = await listVisibleUnits(user);
-  const [figures, allOwners] = await Promise.all([getAllUnitFigures(units), listUnitOwners()]);
+  const [figures, allOwners, savingRows] = await Promise.all([getAllUnitFigures(units), listUnitOwners(), listSavings()]);
+  // Nabung: each person's savings (masuk − keluar), shown as they are on the Nabung page
+  const savings = savingsBalances(savingRows);
+  const savingsTotal = sum(savings, (s) => s.balance);
   // the owners flagged "Ringkasan Owner": only what they took is counted below. One entry per person (by name), over
   // every unit they are flagged in: what they took (counted to the target) and their share of the dividends.
   const flagged = new Map<string, { name: string; taken: number; share: number; units: string[] }>();
@@ -222,6 +226,37 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
             <Kpi label="Total aset" value={fmt.rupiahCompact(assetsAll)} full={fmt.rupiah(assetsAll)} icon={<Package className="size-4" />} block="yellow" hint={`Liga ${fmt.rupiahCompact(assetsLigaAll)} · Sekolah Bola ${fmt.rupiahCompact(assetsSchoolAll)}`} />
             <Kpi label="Target" value="Rp 3 M" full={fmt.rupiah(owner.target)} block="white" hint="Diambil pemilik bertanda, Liga + Sekolah Bola" />
           </div>
+
+          {/* ── Nabung: each person's savings (masuk − keluar), from the Nabung page ───── */}
+          <section className="mt-4 border border-ink bg-white" aria-label="Nabung">
+            <header className="flex flex-wrap items-center justify-between gap-2 border-b border-ink px-5 py-3">
+              <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                <PiggyBank className="size-3.5" /> Nabung — jumlah uang per pemilik
+              </p>
+              <Link href="/nabung" className="inline-flex items-center gap-1 text-xs font-semibold text-ink underline decoration-ink/30 underline-offset-2 hover:decoration-ink">
+                Buka Nabung <ArrowUpRight className="size-3" />
+              </Link>
+            </header>
+            {savings.length === 0 ? (
+              <p className="px-5 py-4 text-xs text-ink-muted">Belum ada tabungan tercatat.</p>
+            ) : (
+              <div className="grid gap-px bg-line sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+                <div className="bg-black p-5 text-white">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">Total</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums" title={fmt.rupiah(savingsTotal)}>{fmt.rupiah(savingsTotal)}</p>
+                  <p className="mt-1 text-[11px] text-white/70">{fmt.number(savings.length)} orang · masuk − keluar</p>
+                </div>
+                <dl className="grid grid-cols-1 gap-px bg-line sm:grid-cols-2 lg:grid-cols-3">
+                  {savings.map((s) => (
+                    <div key={s.name} className="flex items-center justify-between gap-3 bg-white px-4 py-3" title={`Masuk ${fmt.rupiah(s.in)} · keluar ${fmt.rupiah(s.out)}`}>
+                      <dt className="truncate text-sm font-semibold text-ink">{s.name}</dt>
+                      <dd className="shrink-0 text-sm font-semibold tabular-nums text-ink">{fmt.rupiah(s.balance)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
+          </section>
 
           <div className="mt-8">
             <GuideCard
