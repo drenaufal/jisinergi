@@ -124,6 +124,10 @@ Biaya **mingguan** dan **bulanan** ada di dua bagian terpisah (nomor kategori da
   bertanggal hari pertama minggunya; bila unit belum punya tanggal mulai program, tanggal minggu 1 diisi di formulir unggah dan disimpan sebagai
   tanggal mulai program. Biaya yang sama (baris, tanggal, nominal) yang sudah tercatat dilewati, jadi mengunggah file yang sama dua kali tidak
   menggandakan. Biaya pada baris bertanda Aset otomatis masuk ke menu Aset. Aturannya ada di `lib/finance/excel/rab-actual-plan.ts`.
+- **Hapus per keterangan biaya** (Owner, 19-11-2026): tombol tempat sampah di setiap baris (dan *Hapus keterangan* di rincian)
+  menghapus semua biaya actual baris itu beserta bukti struk dan aset yang dibuat darinya. Baris “Di luar RAB Budget” ikut terhapus.
+  Baris dari RAB Budget: centang *Hapus juga dari RAB Budget* (tercentang awal) menghapus barisnya juga dari RAB Budget; tanpa
+  centang hanya biaya actualnya yang dihapus. Aturan: `deleteActualLine` di `lib/finance/records.ts`.
 - Kategori dilipat/dibuka seperti di RAB Budget; di HP tiap keterangan biaya menjadi kartu (budget, actual, sisa, dan minggu yang punya biaya).
 - **Minggu 1** dimulai pada *Tanggal mulai program* unit (diisi Owner di Kelola Unit Bisnis). Bila kosong, minggu 1 dimulai
   Senin pada minggu biaya actual pertama. Biaya sebelum minggu 1 masuk kolom “Sebelum”; biaya setelah minggu program terakhir
@@ -198,6 +202,17 @@ Halaman hanya-baca `/u/<kode>/laporan-keuangan` yang menampilkan lembar “LAPOR
   berbeda dari kolom No di Excel (Excel menaruh gaji bulan April–Mei di bawah baris Agustus–September).
 - Sisa Saldo = Saldo Awal + Total Masuk − Total Keluar. Sejak 15-11-2026 ini **sama dengan** Dividen Sekolah Bola ((modal + pemasukan) − pengeluaran).
   Logikanya ada di `financialReport` (`lib/finance/calc.ts`).
+
+## 7c. Nabung (Owner)
+
+Halaman Owner `/nabung` (menu Owner, 19-11-2026), tidak terikat unit bisnis. Tabel `fin_savings` (migrasi 0007), aturan di `lib/finance/savings.ts`.
+
+- **Owner**: nama & jumlah uang = total uang masuk − total uang keluar per orang. Nama dicocokkan tanpa memandang huruf besar/kecil
+  dan spasi; ejaan pertama yang dipakai.
+- **Pencatatan**: nama, nominal, tanggal, keterangan (Masuk / Keluar), terbaru di atas. Formulir input ada di halaman yang sama;
+  nama disarankan dari penabung yang sudah ada dan pemilik unit.
+- Uang keluar lebih besar dari jumlah uang orang itu ditolak; menghapus uang masuk yang sudah terpakai untuk uang keluar juga ditolak.
+- Ringkasan Owner menampilkan blok **Nabung** (total + jumlah uang per orang) di bawah kartu angka.
 
 ## 8. Peran dan akses
 

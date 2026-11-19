@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Receipt } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ProofChip } from "@/components/finance/bits";
 import { useI18n } from "@/lib/i18n/client";
 import { AddRecordButton, DeleteRecordButton, EditRecordButton, type FinanceRecord, type FormContext } from "../forms";
+import { DeleteLineButton } from "./delete-line";
 
 export type DetailCost = {
   id: string;
@@ -146,7 +146,7 @@ export function CostDetail({
               </div>
             )}
 
-            {(canInput || (canDelete && line.extraId && costs.length === 0)) && (
+            {(canInput || canDelete) && (
               <div className="flex flex-wrap items-center gap-2">
                 {canInput && (
                   <AddRecordButton kind="actualcost" ctx={ctx} preset={{ itemRef: line.key }}>
@@ -164,10 +164,17 @@ export function CostDetail({
                     {t("Ubah keterangan")}
                   </EditRecordButton>
                 )}
-                {canDelete && line.extraId && costs.length === 0 && (
-                  <span className="ml-auto flex items-center gap-1 text-[11px] text-ink-muted">
-                    <Receipt className="size-3" /> {t("Hapus keterangan ini")}
-                    <DeleteRecordButton kind="actualitem" id={line.extraId} name={line.name} />
+                {canDelete && (
+                  <span className="ml-auto">
+                    <DeleteLineButton
+                      lineKey={line.key}
+                      name={line.name}
+                      fromBudget={!line.extraId}
+                      costCount={costs.length}
+                      total={line.total}
+                      withLabel
+                      className="inline-flex h-8 items-center gap-1.5 border border-ink px-3 text-xs font-semibold text-ink transition-colors hover:bg-ink hover:text-white disabled:opacity-50"
+                    />
                   </span>
                 )}
               </div>

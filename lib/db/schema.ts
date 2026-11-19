@@ -439,7 +439,32 @@ export const finExpenses = mysqlTable(
   (t) => [index("fin_expenses_unit_date_idx").on(t.businessUnitId, t.spentOn)],
 );
 
+/* ── Nabung (owner savings) ──────────────────────────────────────────
+ * Not part of any business unit: the Owner's own savings book. Each row is money put in ("masuk") or taken out
+ * ("keluar") by one person; a person's balance = everything in − everything out (lib/finance/savings.ts).
+ */
+
+/** in = uang masuk, out = uang keluar. */
+export const savingDirection = ["in", "out"] as const;
+
+export const finSavings = mysqlTable(
+  "fin_savings",
+  {
+    id: id(),
+    /** Who the money belongs to. People are matched by name (trimmed, case-insensitive). */
+    name: varchar("name", { length: 120 }).notNull(),
+    direction: mysqlEnum("direction", savingDirection).notNull(),
+    amount: rupiah("amount").notNull(),
+    savedOn: date("saved_on").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").default(NOW).notNull(),
+  },
+  (t) => [index("fin_savings_name_idx").on(t.name, t.savedOn)],
+);
+
 /* ═══════════════════════════ Type exports ═════════════════════════ */
+
+export type FinSaving = typeof finSavings.$inferSelect;
 
 export type BusinessUnit = typeof businessUnits.$inferSelect;
 export type FinAsset = typeof finAssets.$inferSelect;
