@@ -2,7 +2,7 @@ import type { z } from "zod";
 import { asc, eq } from "drizzle-orm";
 import { hash } from "bcryptjs";
 import { db } from "@/lib/db";
-import { businessUnitMembers, businessUnits, finCapital, finUnitOwners, users } from "@/lib/db/schema";
+import { businessUnitMembers, businessUnits, finCapital, finOwners, finUnitOwners, users } from "@/lib/db/schema";
 import { APP_TIME_ZONE } from "@/lib/i18n/format";
 import type { TFunction } from "@/lib/i18n/translate";
 import { releaseReplaced } from "@/lib/media-store";
@@ -64,6 +64,26 @@ export async function createUnit(t: TFunction, input: z.output<ReturnType<typeof
     await db.transaction(async (tx) => {
       await tx.insert(businessUnits).values({ id, ...unit, programStartsOn: isSchool ? null : unit.programStartsOn });
       await tx.insert(finUnitOwners).values(ownerRows(id, owners));
+
+      // Also ensure all registered global owners are present in this unit with 0% and in_overview = true
+      const globalOwners = await tx.select({ name: finOwners.name }).from(finOwners).where(eq(finOwners.active, true));
+      const existingNames = new Set(owners.map((o) => o.name.trim().toLowerCase()));
+      const missingGlobalOwners = globalOwners.filter((g) => !existingNames.has(g.name.trim().toLowerCase()));
+      if (missingGlobalOwners.length) {
+        await tx.insert(finUnitOwners).values(
+          missingGlobalOwners.map((g, idx) => ({
+            id: crypto.randomUUID(),
+            businessUnitId: id,
+            name: g.name.trim(),
+            shareBp: 0,
+            position: owners.length + idx + 1,
+            takenAmount: 0,
+            takenOn: null,
+            inOverview: true,
+          })),
+        );
+      }
+
       const today = new Date().toLocaleDateString("sv-SE", { timeZone: APP_TIME_ZONE });
       const capital = isSchool ? owners.filter((o) => o.capital > 0) : [];
       if (capital.length) {

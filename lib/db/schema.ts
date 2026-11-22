@@ -462,8 +462,26 @@ export const finSavings = mysqlTable(
   (t) => [index("fin_savings_name_idx").on(t.name, t.savedOn)],
 );
 
+/* ── Master Data Owner ───────────────────────────────────────────────
+ * Central owner registry. Added owners are synced into every business unit's dividend table
+ * (with default 0% and in_overview = true), available in Nabung autocomplete, and shown on Ringkasan Owner.
+ */
+
+export const finOwners = mysqlTable(
+  "fin_owners",
+  {
+    id: id(),
+    name: varchar("name", { length: 120 }).notNull().unique(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at").default(NOW).notNull(),
+    updatedAt: timestamp("updated_at").default(NOW).notNull(),
+  },
+  (t) => [uniqueIndex("fin_owners_name_idx").on(t.name)],
+);
+
 /* ═══════════════════════════ Type exports ═════════════════════════ */
 
+export type FinOwner = typeof finOwners.$inferSelect;
 export type FinSaving = typeof finSavings.$inferSelect;
 
 export type BusinessUnit = typeof businessUnits.$inferSelect;

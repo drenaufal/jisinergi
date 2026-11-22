@@ -194,7 +194,9 @@ export default async function OwnerOverviewPage({ searchParams }: { searchParams
                           >
                             <span className="font-semibold text-ink">{o.name}</span>
                             <span className="tabular-nums">
-                              {fmt.rupiahCompact(o.share)} <span className="text-ink-muted">· diambil {fmt.rupiahCompact(o.taken)}</span>
+                              {/* jumlah yang dimiliki */}
+                              {/* {fmt.rupiahCompact(o.share)} */}
+                               <span className="text-ink-muted"> {fmt.rupiahCompact(o.taken)}</span>
                             </span>
                           </span>
                         ))}

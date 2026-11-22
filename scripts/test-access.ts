@@ -58,7 +58,7 @@ const units = [
   { code: "SB-2", name: "Sekolah Dua", type: "sekolah_bola" as const, active: false },
 ];
 const ownerNav = buildNav({ role: "owner" }, units);
-eq(ownerNav.general.map((l) => l.href), ["/ringkasan", "/nabung", "/unit", "/audit"], "owner: overview, savings, unit management, audit trail");
+eq(ownerNav.general.map((l) => l.href), ["/ringkasan", "/owner", "/nabung", "/unit", "/audit"], "owner: overview, global owners, savings, unit management, audit trail");
 eq(ownerNav.units.map((u) => u.code), ["LIGA-1", "SB-1", "SB-2"], "owner: every unit");
 eq(ownerNav.units[0].links.length, 8, "a Liga unit: summary + seven menus");
 eq(ownerNav.units[1].links.map((l) => l.label), ["Ringkasan unit", "Pemasukan", "Pengeluaran", "Laporan Keuangan", "Aset", "Modal", "Dividen"], "a Sekolah Bola unit: summary + six menus");
