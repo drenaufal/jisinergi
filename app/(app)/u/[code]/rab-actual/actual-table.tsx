@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import { AddRecordButton, type FormContext } from "../forms";
 import { CostDetail, type DetailCost, type DetailLine } from "./cost-detail";
+import { DeleteLineButton } from "./delete-line";
 
 type Money = Record<number, number>;
 
@@ -71,7 +72,8 @@ export function ActualTable({
 }) {
   const { t, fmt } = useI18n();
   const fold = useFolding(groups.map((g) => g.category));
-  const cols = weeks.length + (weekly ? 5 : 4) + (canInput ? 1 : 0);
+  const showActions = canInput || canDelete;
+  const cols = weeks.length + (weekly ? 5 : 4) + (showActions ? 1 : 0);
   const sectionOver = totals.remaining < 0;
   const diffLabel = (n: number) => (n === 0 ? "0" : `${n > 0 ? "▲" : "▼"} ${fmt.number(Math.abs(n))}`);
   const rest = (n: number, show: boolean) => (show ? `${n < 0 ? "▲ " : ""}${fmt.number(Math.abs(n))}` : "—");
@@ -81,6 +83,10 @@ export function ActualTable({
     <AddRecordButton kind="actualcost" ctx={ctx} variant="cell" preset={{ itemRef: key }} label={t("Tambah biaya actual")} className={className}>
       <Receipt className="size-3.5" />
     </AddRecordButton>
+  );
+
+  const deleteLine = (l: ActualLineView, className?: string) => (
+    <DeleteLineButton lineKey={l.key} name={l.name} fromBudget={!l.extra} costCount={l.costs.length} total={l.total} className={className} />
   );
 
   return (
@@ -104,7 +110,7 @@ export function ActualTable({
               ))}
               <th className="px-3 py-2.5 text-right">{t("Total")}</th>
               <th className="px-3 py-2.5 text-right">{t("Sisa")}</th>
-              {canInput && <th className="w-12 px-2"><span className="sr-only">{t("Aksi")}</span></th>}
+              {showActions && <th className="w-20 px-2"><span className="sr-only">{t("Aksi")}</span></th>}
             </tr>
           </thead>
           <tbody>
@@ -128,7 +134,7 @@ export function ActualTable({
                     ))}
                     <td className="px-3 py-2 text-right text-[13px] font-bold tabular-nums">{fmt.number(g.total)}</td>
                     <td className="px-3 py-2 text-right text-[13px] font-semibold tabular-nums">{g.programBudget > 0 || g.total > 0 ? fmt.number(g.remaining) : "—"}</td>
-                    {canInput && <td />}
+                    {showActions && <td />}
                   </tr>
                   {open &&
                     g.lines.map((l, li) => {
@@ -152,7 +158,14 @@ export function ActualTable({
                           ))}
                           <td className="px-3 py-2 text-right font-semibold tabular-nums text-ink">{l.total > 0 ? fmt.number(l.total) : "—"}</td>
                           <td className={cn("px-3 py-2 text-right tabular-nums", l.remaining < 0 ? "font-bold text-ink" : "text-ink-secondary")}>{rest(l.remaining, hasBudget || l.total > 0)}</td>
-                          {canInput && <td className="px-1 py-1">{addCost(l.key, "grid size-8 place-items-center text-ink-muted transition-colors hover:bg-ink hover:text-white")}</td>}
+                          {showActions && (
+                            <td className="px-1 py-1">
+                              <div className="flex justify-end gap-0.5">
+                                {canInput && addCost(l.key, "grid size-8 place-items-center text-ink-muted transition-colors hover:bg-ink hover:text-white")}
+                                {canDelete && deleteLine(l)}
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -171,7 +184,7 @@ export function ActualTable({
               ))}
               <td className="px-3 py-3 text-right">{fmt.number(totals.total)}</td>
               <td className="px-3 py-3 text-right">{`${sectionOver ? "▲ " : ""}${fmt.number(Math.abs(totals.remaining))}`}</td>
-              {canInput && <td />}
+              {showActions && <td />}
             </tr>
             {variance && variance.weeks > 0 && (
               <>
@@ -185,7 +198,7 @@ export function ActualTable({
                   ))}
                   <td className="px-3 py-2 text-right">{fmt.number(variance.budget)}</td>
                   <td />
-                  {canInput && <td />}
+                  {showActions && <td />}
                 </tr>
                 <tr className="border-t border-line text-xs font-semibold tabular-nums text-ink">
                   <td className="sticky left-0 z-10 bg-white" />
@@ -197,7 +210,7 @@ export function ActualTable({
                   ))}
                   <td className="px-3 py-2 text-right">{diffLabel(variance.difference)}</td>
                   <td />
-                  {canInput && <td />}
+                  {showActions && <td />}
                 </tr>
               </>
             )}
@@ -244,7 +257,12 @@ export function ActualTable({
                             <CostDetail line={l.detail} costs={l.costs} ctx={ctx} canInput={canInput} canDelete={canDelete} />
                             {l.extra && <Badge className="ml-2 align-middle" tone="neutral">{t("Di luar RAB Budget")}</Badge>}
                           </div>
-                          {canInput && addCost(l.key, "grid size-8 shrink-0 place-items-center border border-line text-ink-muted transition-colors hover:bg-ink hover:text-white")}
+                          {showActions && (
+                            <div className="flex shrink-0 gap-1">
+                              {canInput && addCost(l.key, "grid size-8 shrink-0 place-items-center border border-line text-ink-muted transition-colors hover:bg-ink hover:text-white")}
+                              {canDelete && deleteLine(l, "grid size-8 shrink-0 place-items-center border border-line text-ink-muted transition-colors hover:bg-ink hover:text-white disabled:opacity-50")}
+                            </div>
+                          )}
                         </div>
                         <dl className="grid grid-cols-3 gap-px border border-line bg-line text-center">
                           <div className="bg-white px-1 py-1.5">

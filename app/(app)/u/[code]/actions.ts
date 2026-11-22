@@ -6,7 +6,7 @@ import { formError, type FormState } from "@/lib/form";
 import { getT } from "@/lib/i18n/server";
 import { ENTITIES, isFinanceKind, type FinanceKind } from "@/lib/finance/entities";
 import { scopeOf } from "@/lib/finance/access";
-import { FinanceRuleError, deleteFinanceRecord, markCapitalReturned, saveFinanceRecord } from "@/lib/finance/records";
+import { FinanceRuleError, deleteActualLine, deleteFinanceRecord, markCapitalReturned, saveFinanceRecord } from "@/lib/finance/records";
 import { bpToField, ownersSchema, readOwnerRows } from "@/lib/finance/ownership";
 import { UnitRuleError, replaceUnitOwners } from "@/lib/finance/units";
 import { saveDividendTaken, setLeagueFinished } from "@/lib/finance/dividend";
@@ -162,6 +162,24 @@ export async function saveOwnersAction(unitId: string, _prev: FormState, formDat
     });
   } catch (error) {
     if (error instanceof UnitRuleError) return formError(t, error.fieldErrors, formData, error.message);
+    throw error;
+  }
+  refresh();
+  return undefined;
+}
+
+/**
+ * RAB Actual: removes one keterangan biaya with all its real costs. A RAB Budget line keeps existing (only its costs
+ * go) unless `withBudgetLine` is set; then it is removed from RAB Budget too.
+ */
+export async function deleteActualLineAction(lineKey: string, withBudgetLine: boolean): Promise<DeleteResult> {
+  const t = await getT();
+  const user = await actionUser("delete");
+  const scope = scopeOf(user);
+  try {
+    await deleteActualLine({ t, actor: user, scope, lineKey, withBudgetLine });
+  } catch (error) {
+    if (error instanceof FinanceRuleError) return { error: error.message };
     throw error;
   }
   refresh();

@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   LogOut,
   Package,
+  PiggyBank,
   ScrollText,
   Target,
   Ticket,
@@ -30,6 +31,7 @@ import { cn } from "@/lib/utils";
 
 const ICONS: Record<string, LucideIcon> = {
   "/ringkasan": Target,
+  "/nabung": PiggyBank,
   "/unit": Building2,
   "/audit": ScrollText,
   aset: Package,
