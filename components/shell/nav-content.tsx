@@ -20,6 +20,7 @@ import {
   ScrollText,
   Target,
   Ticket,
+  Users,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import { cn } from "@/lib/utils";
 
 const ICONS: Record<string, LucideIcon> = {
   "/ringkasan": Target,
+  "/owner": Users,
   "/nabung": PiggyBank,
   "/unit": Building2,
   "/audit": ScrollText,

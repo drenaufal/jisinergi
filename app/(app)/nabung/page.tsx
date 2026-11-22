@@ -25,7 +25,7 @@ export default async function SavingsPage() {
   const { fmt } = await getI18n();
   const rows = await listSavings();
   const balances = savingsBalances(rows);
-  const names = await savingNameSuggestions(rows);
+  const names = await savingNameSuggestions();
   const canDelete = can(user.role, "delete");
 
   const totalIn = sum(rows.filter((r) => r.direction === "in"), (r) => r.amount);

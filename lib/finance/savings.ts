@@ -1,7 +1,7 @@
 import { asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { finSavings, finUnitOwners, savingDirection } from "@/lib/db/schema";
+import { finOwners, finSavings, savingDirection } from "@/lib/db/schema";
 import { auditText, recordAudit } from "@/lib/audit";
 import type { TFunction } from "@/lib/i18n/translate";
 import { FinanceRuleError, type Actor } from "./records";
@@ -52,18 +52,14 @@ export const listSavings = (): Promise<SavingRow[]> =>
     .from(finSavings)
     .orderBy(desc(finSavings.savedOn), desc(finSavings.createdAt));
 
-/** Names to suggest in the form: everyone who already saved, then the owners of the business units. */
-export async function savingNameSuggestions(rows: readonly SavingRow[]) {
-  const owners = await db.selectDistinct({ name: finUnitOwners.name }).from(finUnitOwners).orderBy(asc(finUnitOwners.name));
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const name of [...savingsBalances(rows).map((b) => b.name), ...owners.map((o) => o.name.trim())]) {
-    const key = savingKey(name);
-    if (!name || seen.has(key)) continue;
-    seen.add(key);
-    out.push(name);
-  }
-  return out;
+/** Owner names for Nabung: strictly from Data Owner (fin_owners) that are active. */
+export async function savingNameSuggestions(): Promise<string[]> {
+  const globalOwners = await db
+    .select({ name: finOwners.name })
+    .from(finOwners)
+    .where(eq(finOwners.active, true))
+    .orderBy(asc(finOwners.name));
+  return globalOwners.map((g) => g.name.trim()).filter(Boolean);
 }
 
 async function balanceOf(name: string) {
