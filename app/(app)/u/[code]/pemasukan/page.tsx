@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowDownToLine, CalendarCheck, Percent, Scale, UserPlus, Users, Wallet } from "lucide-react";
 import { loadUnitPage } from "@/lib/finance/access";
-import { listExpenses, listStudentPayments, listStudents } from "@/lib/finance/queries";
-import { coveredMonth, incomeByKind, incomeMonthsByKind, schoolMonthly, studentStatus, sum, type PaymentKind } from "@/lib/finance/calc";
+import { listCapital, listExpenses, listStudentPayments, listStudents } from "@/lib/finance/queries";
+import { capitalSummary, coveredMonth, incomeByKind, incomeMonthsByKind, schoolMonthly, studentStatus, sum, type PaymentKind } from "@/lib/finance/calc";
 import { PAYMENT_KIND_LABEL } from "@/lib/finance/entities";
 import { currentMonth } from "@/lib/finance/period";
 import { menuHref } from "@/lib/finance/unit-types";
@@ -39,7 +39,7 @@ export default async function IncomePage({
   const { unit, form, canInput, canDelete } = await loadUnitPage(code, "sekolah_bola");
   const { fmt } = await getI18n();
 
-  const [students, payments, expenses] = await Promise.all([listStudents(unit.id), listStudentPayments(unit.id), listExpenses(unit.id)]);
+  const [students, payments, expenses, capital] = await Promise.all([listStudents(unit.id), listStudentPayments(unit.id), listExpenses(unit.id), listCapital(unit.id)]);
   const tab = sp.tab === "pembayaran" ? "pembayaran" : "siswa";
   const kindFilter = isKind(sp.jenis) ? sp.jenis : null;
   const month = currentMonth();
@@ -48,9 +48,16 @@ export default async function IncomePage({
   const income = incomeByKind(payments);
   // a registration already includes the fee of the month it was paid in, so it counts as "this month paid" too
   const paidThisMonth = students.filter((s) => studentStatus(payments, s.id, month).paidThisMonth).length;
-  const monthRows = schoolMonthly(payments, expenses);
+  // Rumus awal (hanya pemasukan - pengeluaran tanpa modal):
+  // const monthRows = schoolMonthly(payments, expenses);
+  // const balanceNow = monthRows.find((m) => m.month === month)?.dividend ?? 0;
+  // const balanceAll = sum(monthRows, (m) => m.dividend);
+
+  const modal = capitalSummary(capital).total;
+  const expenseTotal = sum(expenses, (e) => e.amount);
+  const balanceTotal = modal + income.total - expenseTotal;
+  const monthRows = schoolMonthly(payments, expenses, capital);
   const balanceNow = monthRows.find((m) => m.month === month)?.dividend ?? 0;
-  const balanceAll = sum(monthRows, (m) => m.dividend);
   const formCtx = { ...form, students: students.map((s) => ({ id: s.id, name: s.name, jerseyNumber: s.jerseyNumber })) };
   const here = menuHref(unit.code, "pemasukan");
   const actions = canInput || canDelete;
@@ -123,7 +130,7 @@ export default async function IncomePage({
         terms={[
           { term: "Registrasi", text: "Uang pendaftaran, dibayar sekali per siswa, dengan diskon jika ada. Sudah termasuk iuran bulan saat registrasi dibayar." },
           { term: "Iuran bulanan", text: "Satu pembayaran untuk setiap bulan; kolom “Bulan ini” menunjukkan siapa yang belum membayar." },
-          { term: "Sisa saldo", text: "Pemasukan bulan ini dikurangi pengeluaran bulan ini. Dividen = uang modal + semua pemasukan − semua pengeluaran (menu Dividen). Uang jersey tidak dicatat sebagai pemasukan." },
+          { term: "Sisa saldo", text: "(Uang modal + semua pemasukan) − semua pengeluaran (sama dengan dividen di menu Dividen). Uang jersey tidak dicatat sebagai pemasukan." },
           { term: "Diskon", text: "Potongan yang diberikan. Hanya informasi, bukan bagian dari uang yang diterima." },
           { term: "Bukti", text: "Foto atau scan bukti pembayaran. Klik “Lihat bukti” untuk membukanya." },
         ]}
@@ -136,7 +143,8 @@ export default async function IncomePage({
         <Kpi label="Registrasi" value={fmt.rupiahCompact(income.registration)} full={fmt.rupiah(income.registration)} icon={<Wallet className="size-4" />} block="white" hint={`${fmt.number(new Set(payments.filter((p) => p.kind === "registration").map((p) => p.studentId)).size)} siswa`} />
         <Kpi label="Iuran bulanan" value={fmt.rupiahCompact(income.monthly)} full={fmt.rupiah(income.monthly)} icon={<CalendarCheck className="size-4" />} block="white" hint={`${fmt.number(paidThisMonth)}/${fmt.number(students.length)} siswa bayar ${monthLabel(month)}`} />
         <Kpi label="Diskon diberikan" value={fmt.rupiahCompact(income.discounts)} full={fmt.rupiah(income.discounts)} icon={<Percent className="size-4" />} block="yellow" hint="Registrasi + bulanan" />
-        <Kpi label="Sisa saldo" value={fmt.rupiahCompact(balanceNow)} full={fmt.rupiah(balanceNow)} icon={<Scale className="size-4" />} block="night" hint={`Bulan ${monthLabel(month)} · akumulasi ${fmt.rupiahCompact(balanceAll)}`} />
+        {/* <Kpi label="Sisa saldo" value={fmt.rupiahCompact(balanceNow)} full={fmt.rupiah(balanceNow)} icon={<Scale className="size-4" />} block="night" hint={`Bulan ${monthLabel(month)} · akumulasi ${fmt.rupiahCompact(balanceAll)}`} /> */}
+        <Kpi label="Sisa saldo" value={fmt.rupiahCompact(balanceTotal)} full={fmt.rupiah(balanceTotal)} icon={<Scale className="size-4" />} block="night" hint={`(Modal + pemasukan) − pengeluaran · ${monthLabel(month)} ${fmt.rupiahCompact(balanceNow)}`} />
       </div>
 
       {months.length > 0 && (
