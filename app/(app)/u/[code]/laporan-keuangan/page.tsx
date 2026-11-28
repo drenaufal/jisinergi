@@ -8,10 +8,10 @@ import { menuHref } from "@/lib/finance/unit-types";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/misc";
-import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Notice } from "@/components/finance/bits";
 import { GuideCard } from "@/components/finance/guide-card";
 import { getI18n } from "@/lib/i18n/server";
+import { ReportTable } from "./report-table";
 
 export const metadata: Metadata = { title: "Laporan Keuangan" };
 export const dynamic = "force-dynamic";
@@ -29,9 +29,6 @@ export default async function FinancialReportPage({ params }: { params: Promise<
   const [payments, expenses, capital] = await Promise.all([listStudentPayments(unit.id), listExpenses(unit.id), listCapital(unit.id)]);
   const report = financialReport({ openingBalance: capitalSummary(capital).total, payments, expenses });
   const link = (slug: string) => menuHref(unit.code, slug);
-  const day = (iso: string) => fmt.date(iso, { day: "2-digit", month: "short", year: "numeric" });
-  const month = (m: string) => fmt.date(`${m}-01`, { month: "short", year: "numeric" });
-  const amount = (n: number) => (n ? fmt.number(n) : "");
 
   return (
     <div>
@@ -102,46 +99,7 @@ export default async function FinancialReportPage({ params }: { params: Promise<
               }
             />
           ) : (
-            <Table>
-              <THead>
-                <TR className="hover:bg-transparent">
-                  <TH className="w-12">No</TH>
-                  <TH>Date</TH>
-                  <TH>Note</TH>
-                  <TH className="text-right">Absen</TH>
-                  <TH className="text-right">Gaji Satuan</TH>
-                  <TH className="text-right">Cash In</TH>
-                  <TH className="text-right">Cash Out</TH>
-                </TR>
-              </THead>
-              <TBody>
-                {report.rows.map((r) => (
-                  <TR key={r.no}>
-                    <TD className="tabular-nums text-ink-muted">{r.no}</TD>
-                    <TD className="whitespace-nowrap tabular-nums">{day(r.date)}</TD>
-                    <TD>
-                      <span className="font-medium text-ink">{r.note}</span>
-                      <span className="block text-[11px] text-ink-muted">
-                        {r.direction === "in" ? (r.kind === "registration" ? "Registrasi" : "Iuran") + (r.period ? ` ${month(r.period)}` : "") : r.category}
-                      </span>
-                    </TD>
-                    <TD className="text-right tabular-nums">{r.attendanceDays ?? ""}</TD>
-                    <TD className="text-right tabular-nums">{r.dailyRate != null ? fmt.number(r.dailyRate) : ""}</TD>
-                    <TD className="text-right font-medium tabular-nums text-ink">{amount(r.cashIn)}</TD>
-                    <TD className="text-right font-medium tabular-nums text-ink">{amount(r.cashOut)}</TD>
-                  </TR>
-                ))}
-              </TBody>
-              <tfoot>
-                <tr className="border-t-2 border-ink bg-surface-2 text-sm font-bold tabular-nums text-ink">
-                  <td colSpan={5} className="px-3 py-3 text-xs font-semibold uppercase tracking-wider">
-                    Total · {fmt.number(report.rows.length)} baris
-                  </td>
-                  <td className="px-3 py-3 text-right">{fmt.number(report.totalIn)}</td>
-                  <td className="px-3 py-3 text-right">{fmt.number(report.totalOut)}</td>
-                </tr>
-              </tfoot>
-            </Table>
+            <ReportTable rows={report.rows} totalIn={report.totalIn} totalOut={report.totalOut} />
           )}
         </CardContent>
       </Card>

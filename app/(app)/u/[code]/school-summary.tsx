@@ -39,7 +39,8 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
         terms={[
           { term: "Pemasukan", text: "Registrasi dan iuran bulanan yang sudah diterima. Registrasi sudah termasuk iuran bulan itu; uang jersey tidak dicatat." },
           { term: "Pengeluaran", text: "Semua biaya yang dikeluarkan sekolah, menurut tanggal pengeluarannya." },
-          { term: "Sisa saldo", text: "Pemasukan bulan itu dikurangi pengeluaran bulan itu (dividen per bulan). Bisa negatif jika pengeluaran lebih besar." },
+          // { term: "Sisa saldo", text: "Pemasukan bulan itu dikurangi pengeluaran bulan itu (dividen per bulan). Bisa negatif jika pengeluaran lebih besar." },
+          { term: "Sisa saldo", text: "(Uang modal + pemasukan) − pengeluaran (sama dengan nilai dividen unit)." },
           { term: "Aset dan modal", text: "Aset adalah barang yang dimiliki sekolah; modal adalah uang yang disetor pemilik." },
           { term: "Diskon diberikan", text: "Potongan registrasi dan iuran. Hanya informasi — bukan bagian dari uang yang diterima." },
         ]}
@@ -59,7 +60,8 @@ export async function SchoolSummary({ unit }: { unit: UnitInfo }) {
           <Kpi label="Pengeluaran" value={fmt.rupiahCompact(f.expense)} full={fmt.rupiah(f.expense)} icon={<ArrowUpFromLine className="size-4" />} block="blue" hint={`${fmt.number(expenses.length)} catatan pengeluaran`} />
         </Link>
         <Link href={link("dividen")} className="block transition-transform hover:-translate-y-0.5">
-          <Kpi label="Sisa saldo" value={fmt.rupiahCompact(f.net)} full={fmt.rupiah(f.net)} icon={<Scale className="size-4" />} block="night" hint={`Pemasukan − pengeluaran · dividen ${fmt.rupiahCompact(f.dividend)}`} />
+          {/* <Kpi label="Sisa saldo" value={fmt.rupiahCompact(f.net)} full={fmt.rupiah(f.net)} icon={<Scale className="size-4" />} block="night" hint={`Pemasukan − pengeluaran · dividen ${fmt.rupiahCompact(f.dividend)}`} /> */}
+          <Kpi label="Sisa saldo" value={fmt.rupiahCompact(f.dividend)} full={fmt.rupiah(f.dividend)} icon={<Scale className="size-4" />} block="night" hint="(Modal + pemasukan) − pengeluaran" />
         </Link>
         <Link href={link("pemasukan")} className="block transition-transform hover:-translate-y-0.5">
           <Kpi label="Siswa terdaftar" value={fmt.number(students.length)} icon={<Users className="size-4" />} block="white" hint="Klik untuk melihat daftar siswa" />

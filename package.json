@@ -14,6 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "db:setup-local": "tsx scripts/setup-local-db.ts",
     "db:migrate": "tsx lib/db/migrate.ts",
+    "db:drop": "tsx scripts/db-drop.ts",
+    "db:clean": "tsx scripts/db-drop.ts --force && tsx lib/db/migrate.ts && tsx scripts/seed-owner.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed:owner": "tsx scripts/seed-owner.ts",
